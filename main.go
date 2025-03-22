@@ -48,6 +48,7 @@ func dirWalk(absDirPath string, sha hash.Hash, maxDepth uint8) {
 				continue
 			}
 			dirWalk(filepath.Join(absDirPath, dirname), sha, maxDepth-1)
+			continue
 		}
 		filename := item.Name()
 		fmt.Printf("Found file: %s\n", filename)
@@ -58,6 +59,7 @@ func dirWalk(absDirPath string, sha hash.Hash, maxDepth uint8) {
 		}
 		sha.Write(data)
 		hexDigest := hex.EncodeToString(sha.Sum(nil)[:8])
+		sha.Reset()
 		// Only show the first 8 bytes of the SHA digest.
 		fmt.Printf("File Contents SHA-1: %s\n\n", hexDigest)
 	}

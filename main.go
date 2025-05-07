@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"hash"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,35 +18,35 @@ type DirInfo struct {
 }
 
 func main() {
-	from, to := parseFlags()
-	from, err := filepath.Abs(from)
+	src, dst := parseFlags()
+	src, err := filepath.Abs(src)
 	if err != nil {
 		log.Fatalf("Error getting absolute path: %v\n", err)
 	}
-	to, err = filepath.Abs(to)
+	dst, err = filepath.Abs(dst)
 	if err != nil {
 		log.Fatalf("Error getting absolute path: %v\n", err)
 	}
 	sha := sha1.New()
-	fromDirInfo, err := getDirInfo(from, sha)
+	srcDirInfo, err := getDirInfo(src, sha)
 	if err != nil {
 		log.Fatalf("Error reading directory: %v\n", err)
 	}
-	toDirInfo, err := getDirInfo(to, sha)
+	dstDirInfo, err := getDirInfo(dst, sha)
 	if err != nil {
 		log.Fatalf("Error reading directory: %v\n", err)
 	}
-	syncDirs(from, to, fromDirInfo, toDirInfo)
+	syncDirs(src, dst, srcDirInfo, dstDirInfo)
 }
 
 // Parse flags required to run the program.
 func parseFlags() (string, string) {
-	fromPathPtr := flag.String("from", "./test-1", "Directory with files to sync from")
-	flag.StringVar(fromPathPtr, "f", *fromPathPtr, "Alias for from")
-	toPathPtr := flag.String("to", "./test-2", "Directory with files to sync to")
-	flag.StringVar(toPathPtr, "t", *toPathPtr, "Alias for to")
+	srcPtr := flag.String("from", "./test-1", "Directory with files to sync from")
+	flag.StringVar(srcPtr, "f", *srcPtr, "Alias for src")
+	dstPtr := flag.String("to", "./test-2", "Directory with files to sync to")
+	flag.StringVar(dstPtr, "t", *dstPtr, "Alias for dst")
 	flag.Parse()
-	return *fromPathPtr, *toPathPtr
+	return *srcPtr, *dstPtr
 }
 
 // Map directory info
@@ -59,18 +60,18 @@ func getDirInfo(absDirPath string, sha hash.Hash) (DirInfo, error) {
 	dirInfo.dirs = make(map[string]DirInfo)
 	for _, item := range items {
 		if item.IsDir() {
-			dirname := item.Name()
-			subdirInfo, err := getDirInfo(filepath.Join(absDirPath, dirname), sha)
+			dirName := item.Name()
+			subdirInfo, err := getDirInfo(filepath.Join(absDirPath, dirName), sha)
 			if err != nil {
 				fmt.Printf("Error reading directory: %v\n", err)
 				fmt.Println("Skipping...")
 				continue
 			}
-			dirInfo.dirs[dirname] = subdirInfo
+			dirInfo.dirs[dirName] = subdirInfo
 			continue
 		}
-		filename := item.Name()
-		data, err := os.ReadFile(filepath.Join(absDirPath, filename))
+		fileName := item.Name()
+		data, err := os.ReadFile(filepath.Join(absDirPath, fileName))
 		if err != nil {
 			fmt.Printf("Error reading file: %v\n", err)
 			fmt.Println("Skipping...")
@@ -79,32 +80,56 @@ func getDirInfo(absDirPath string, sha hash.Hash) (DirInfo, error) {
 		sha.Write(data)
 		hexDigest := hex.EncodeToString(sha.Sum(nil)[:8])
 		sha.Reset()
-		dirInfo.files[filename] = hexDigest
+		dirInfo.files[fileName] = hexDigest
 	}
 	return dirInfo, nil
 }
 
-func printDirInfo(dirInfo DirInfo) {
-	if len(dirInfo.files) == 0 {
-		fmt.Println("No files found")
+func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo) {
+	for fileName, srcHash := range srcDirInfo.files {
+		dstHash, ok := dstDirInfo.files[fileName]
+		if !ok || srcHash != dstHash {
+			srcFilePath := filepath.Join(srcPath, fileName)
+			dstFilePath := filepath.Join(dstPath, fileName)
+			copyFile(srcFilePath, dstFilePath)
+		}
+		delete(dstDirInfo.files, fileName)
 	}
-	fmt.Println("Files and Content Hash:")
-	for k, v := range dirInfo.files {
-		fmt.Printf("%s: %s\n", k, v)
-	}
-	if len(dirInfo.dirs) == 0 {
-		fmt.Println("No Subdirectories found")
-	}
-	fmt.Println("Subdirectories:")
-	for k, v := range dirInfo.dirs {
-		fmt.Printf("%s:\n", k)
-		printDirInfo(v)
+
+	for dirName, srcSubDirInfo := range srcDirInfo.dirs {
+		srcPath = filepath.Join(srcPath, dirName)
+		dstPath = filepath.Join(dstPath, dirName)
+		dstSubDirInfo, ok := dstDirInfo.dirs[dirName]
+		if !ok {
+			err := os.Mkdir(dstPath, 0777)
+			if err != nil {
+				fmt.Printf("Cannot create subdirectory: %v\n", err)
+			}
+			dstSubDirInfo = DirInfo{
+				files: make(map[string]string),
+				dirs:  make(map[string]DirInfo),
+			}
+		}
+		syncDirs(srcPath, dstPath, srcSubDirInfo, dstSubDirInfo)
+		delete(dstSubDirInfo.dirs, dirName)
 	}
 }
 
-func syncDirs(from, to string, fromDirInfo, toDirInfo DirInfo) {
-	// TO DO: Sync files from fromDir to toDir
-	printDirInfo(fromDirInfo)
-	fmt.Println()
-	printDirInfo(toDirInfo)
+func copyFile(srcFilePath, dstFilePath string) {
+	srcFile, err := os.Open(srcFilePath)
+	if err != nil {
+		fmt.Printf("Failed to open source file: %v\n", err)
+		return
+	}
+	defer srcFile.Close()
+	dstFile, err := os.Create(dstFilePath)
+	if err != nil {
+		fmt.Printf("Failed to create destination file: %v\n", err)
+		return
+	}
+	defer dstFile.Close()
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		fmt.Printf("Failed to copy file: %v\n", err)
+	}
 }

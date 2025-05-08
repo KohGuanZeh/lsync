@@ -95,13 +95,20 @@ func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo) {
 		}
 		delete(dstDirInfo.files, fileName)
 	}
+	for fileName := range dstDirInfo.files {
+		filePath := filepath.Join(dstPath, fileName)
+		err := os.Remove(filePath)
+		if err != nil {
+			fmt.Printf("Cannot delete file: %v\n", err)
+		}
+	}
 
 	for dirName, srcSubDirInfo := range srcDirInfo.dirs {
-		srcPath = filepath.Join(srcPath, dirName)
-		dstPath = filepath.Join(dstPath, dirName)
+		srcSubDirPath := filepath.Join(srcPath, dirName)
+		dstSubDirPath := filepath.Join(dstPath, dirName)
 		dstSubDirInfo, ok := dstDirInfo.dirs[dirName]
 		if !ok {
-			err := os.Mkdir(dstPath, 0777)
+			err := os.Mkdir(dstSubDirPath, 0777)
 			if err != nil {
 				fmt.Printf("Cannot create subdirectory: %v\n", err)
 			}
@@ -110,8 +117,16 @@ func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo) {
 				dirs:  make(map[string]DirInfo),
 			}
 		}
-		syncDirs(srcPath, dstPath, srcSubDirInfo, dstSubDirInfo)
-		delete(dstSubDirInfo.dirs, dirName)
+		syncDirs(srcSubDirPath, dstSubDirPath, srcSubDirInfo, dstSubDirInfo)
+		delete(dstDirInfo.dirs, dirName)
+	}
+	for dirName := range dstDirInfo.dirs {
+		dstSubDirPath := filepath.Join(dstPath, dirName)
+		fmt.Println(dstSubDirPath)
+		err := os.RemoveAll(dstSubDirPath)
+		if err != nil {
+			fmt.Printf("Cannot delete subdirectory: %v\n", err)
+		}
 	}
 }
 

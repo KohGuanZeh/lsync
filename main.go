@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/sha1"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -10,14 +9,18 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/cespare/xxhash"
 )
 
 type DirInfo struct {
-	files map[string]string
+	files map[string]struct{}
 	dirs  map[string]DirInfo
 }
 
 func main() {
+	start := time.Now()
 	src, dst := parseFlags()
 	src, err := filepath.Abs(src)
 	if err != nil {
@@ -27,16 +30,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error getting absolute path: %v\n", err)
 	}
-	sha := sha1.New()
-	srcDirInfo, err := getDirInfo(src, sha)
+	srcDirInfo, err := getDirInfo(src)
 	if err != nil {
 		log.Fatalf("Error reading directory: %v\n", err)
 	}
-	dstDirInfo, err := getDirInfo(dst, sha)
+	dstDirInfo, err := getDirInfo(dst)
 	if err != nil {
 		log.Fatalf("Error reading directory: %v\n", err)
 	}
-	syncDirs(src, dst, srcDirInfo, dstDirInfo)
+	xxh := xxhash.New()
+	syncDirs(src, dst, srcDirInfo, dstDirInfo, xxh)
+	fmt.Printf("Time taken: %s", time.Since(start))
 }
 
 // Parse flags required to run the program.
@@ -50,18 +54,18 @@ func parseFlags() (string, string) {
 }
 
 // Map directory info
-func getDirInfo(absDirPath string, sha hash.Hash) (DirInfo, error) {
+func getDirInfo(absDirPath string) (DirInfo, error) {
 	dirInfo := DirInfo{}
 	items, err := os.ReadDir(absDirPath)
 	if err != nil {
 		return dirInfo, err
 	}
-	dirInfo.files = make(map[string]string)
+	dirInfo.files = make(map[string]struct{})
 	dirInfo.dirs = make(map[string]DirInfo)
 	for _, item := range items {
 		if item.IsDir() {
 			dirName := item.Name()
-			subdirInfo, err := getDirInfo(filepath.Join(absDirPath, dirName), sha)
+			subdirInfo, err := getDirInfo(filepath.Join(absDirPath, dirName))
 			if err != nil {
 				fmt.Printf("Error reading directory: %v\n", err)
 				fmt.Println("Skipping...")
@@ -71,29 +75,67 @@ func getDirInfo(absDirPath string, sha hash.Hash) (DirInfo, error) {
 			continue
 		}
 		fileName := item.Name()
-		data, err := os.ReadFile(filepath.Join(absDirPath, fileName))
-		if err != nil {
-			fmt.Printf("Error reading file: %v\n", err)
-			fmt.Println("Skipping...")
-			continue
-		}
-		sha.Write(data)
-		hexDigest := hex.EncodeToString(sha.Sum(nil)[:8])
-		sha.Reset()
-		dirInfo.files[fileName] = hexDigest
+		dirInfo.files[fileName] = struct{}{}
 	}
 	return dirInfo, nil
 }
 
-func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo) {
-	for fileName, srcHash := range srcDirInfo.files {
-		dstHash, ok := dstDirInfo.files[fileName]
-		if !ok || srcHash != dstHash {
-			srcFilePath := filepath.Join(srcPath, fileName)
-			dstFilePath := filepath.Join(dstPath, fileName)
+func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo, h hash.Hash) {
+	for fileName := range srcDirInfo.files {
+		srcFilePath := filepath.Join(srcPath, fileName)
+		dstFilePath := filepath.Join(dstPath, fileName)
+		_, ok := dstDirInfo.files[fileName]
+		delete(dstDirInfo.files, fileName)
+		if !ok {
+			copyFile(srcFilePath, dstFilePath)
+			continue
+		}
+
+		srcFileInfo, err := os.Stat(srcFilePath)
+		if err != nil {
+			fmt.Printf("Cannot get source file info: %v\n", err)
+			continue
+		}
+		dstFileInfo, err := os.Stat(dstFilePath)
+		if err != nil {
+			fmt.Printf("Cannot get destination file info: %v\n", err)
+			continue
+		}
+		if srcFileInfo.Size() != dstFileInfo.Size() {
+			copyFile(srcFilePath, dstFilePath)
+			continue
+		}
+
+		srcData, err := os.ReadFile(srcFilePath)
+		if err != nil {
+			fmt.Printf("Cannot read source file: %v\n", err)
+			continue
+		}
+		_, err = h.Write(srcData)
+		if err != nil {
+			fmt.Printf("Error hashing source file content: %v\n", err)
+			continue
+		}
+		srcDigest := hex.EncodeToString(h.Sum(nil))
+		h.Reset()
+
+		dstData, err := os.ReadFile(dstFilePath)
+		if err != nil {
+			fmt.Printf("Cannot read destination file: %v\n", err)
+			continue
+		}
+		_, err = h.Write(dstData)
+		if err != nil {
+			fmt.Printf("Error hashing source file content: %v\n", err)
+			continue
+		}
+		dstDigest := hex.EncodeToString(h.Sum(nil))
+		h.Reset()
+
+		if srcDigest != dstDigest {
 			copyFile(srcFilePath, dstFilePath)
 		}
-		delete(dstDirInfo.files, fileName)
+
 	}
 	for fileName := range dstDirInfo.files {
 		filePath := filepath.Join(dstPath, fileName)
@@ -107,18 +149,25 @@ func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo) {
 		srcSubDirPath := filepath.Join(srcPath, dirName)
 		dstSubDirPath := filepath.Join(dstPath, dirName)
 		dstSubDirInfo, ok := dstDirInfo.dirs[dirName]
+		delete(dstDirInfo.dirs, dirName)
 		if !ok {
-			err := os.Mkdir(dstSubDirPath, 0777)
+			dirStat, err := os.Stat(srcSubDirPath)
+			if err != nil {
+				fmt.Printf("Cannot get source subdirectory info: %v\n", err)
+				continue
+			}
+			perm := dirStat.Mode().Perm()
+			err = os.Mkdir(dstSubDirPath, perm)
 			if err != nil {
 				fmt.Printf("Cannot create subdirectory: %v\n", err)
+				continue
 			}
 			dstSubDirInfo = DirInfo{
-				files: make(map[string]string),
+				files: make(map[string]struct{}),
 				dirs:  make(map[string]DirInfo),
 			}
 		}
-		syncDirs(srcSubDirPath, dstSubDirPath, srcSubDirInfo, dstSubDirInfo)
-		delete(dstDirInfo.dirs, dirName)
+		syncDirs(srcSubDirPath, dstSubDirPath, srcSubDirInfo, dstSubDirInfo, h)
 	}
 	for dirName := range dstDirInfo.dirs {
 		dstSubDirPath := filepath.Join(dstPath, dirName)
@@ -147,4 +196,5 @@ func copyFile(srcFilePath, dstFilePath string) {
 	if err != nil {
 		fmt.Printf("Failed to copy file: %v\n", err)
 	}
+	fmt.Println("FILE COPIED")
 }

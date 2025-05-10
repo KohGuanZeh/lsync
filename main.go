@@ -1,17 +1,15 @@
 package main
 
 import (
-	"encoding/hex"
 	"flag"
 	"fmt"
-	"hash"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 )
 
 type DirInfo struct {
@@ -38,8 +36,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading directory: %v\n", err)
 	}
-	xxh := xxhash.New()
-	syncDirs(src, dst, srcDirInfo, dstDirInfo, xxh)
+	syncDirs(src, dst, srcDirInfo, dstDirInfo)
 	fmt.Printf("Time taken: %s", time.Since(start))
 }
 
@@ -80,7 +77,7 @@ func getDirInfo(absDirPath string) (DirInfo, error) {
 	return dirInfo, nil
 }
 
-func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo, h hash.Hash) {
+func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo) {
 	for fileName := range srcDirInfo.files {
 		srcFilePath := filepath.Join(srcPath, fileName)
 		dstFilePath := filepath.Join(dstPath, fileName)
@@ -90,52 +87,13 @@ func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo, h hash.Ha
 			copyFile(srcFilePath, dstFilePath)
 			continue
 		}
-
-		srcFileInfo, err := os.Stat(srcFilePath)
+		isSameContent, err := isSameFileContent(srcFilePath, dstFilePath)
 		if err != nil {
-			fmt.Printf("Cannot get source file info: %v\n", err)
-			continue
+			fmt.Printf("Error checking file contents: %v\n", err)
 		}
-		dstFileInfo, err := os.Stat(dstFilePath)
-		if err != nil {
-			fmt.Printf("Cannot get destination file info: %v\n", err)
-			continue
-		}
-		if srcFileInfo.Size() != dstFileInfo.Size() {
-			copyFile(srcFilePath, dstFilePath)
-			continue
-		}
-
-		srcData, err := os.ReadFile(srcFilePath)
-		if err != nil {
-			fmt.Printf("Cannot read source file: %v\n", err)
-			continue
-		}
-		_, err = h.Write(srcData)
-		if err != nil {
-			fmt.Printf("Error hashing source file content: %v\n", err)
-			continue
-		}
-		srcDigest := hex.EncodeToString(h.Sum(nil))
-		h.Reset()
-
-		dstData, err := os.ReadFile(dstFilePath)
-		if err != nil {
-			fmt.Printf("Cannot read destination file: %v\n", err)
-			continue
-		}
-		_, err = h.Write(dstData)
-		if err != nil {
-			fmt.Printf("Error hashing source file content: %v\n", err)
-			continue
-		}
-		dstDigest := hex.EncodeToString(h.Sum(nil))
-		h.Reset()
-
-		if srcDigest != dstDigest {
+		if !isSameContent {
 			copyFile(srcFilePath, dstFilePath)
 		}
-
 	}
 	for fileName := range dstDirInfo.files {
 		filePath := filepath.Join(dstPath, fileName)
@@ -167,7 +125,7 @@ func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo, h hash.Ha
 				dirs:  make(map[string]DirInfo),
 			}
 		}
-		syncDirs(srcSubDirPath, dstSubDirPath, srcSubDirInfo, dstSubDirInfo, h)
+		syncDirs(srcSubDirPath, dstSubDirPath, srcSubDirInfo, dstSubDirInfo)
 	}
 	for dirName := range dstDirInfo.dirs {
 		dstSubDirPath := filepath.Join(dstPath, dirName)
@@ -177,6 +135,36 @@ func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirInfo, h hash.Ha
 			fmt.Printf("Cannot delete subdirectory: %v\n", err)
 		}
 	}
+}
+
+func isSameFileContent(srcFilePath, dstFilePath string) (bool, error) {
+	srcFileInfo, err := os.Stat(srcFilePath)
+	if err != nil {
+		return false, err
+	}
+	dstFileInfo, err := os.Stat(dstFilePath)
+	if err != nil {
+		return false, err
+	}
+	if srcFileInfo.Size() != dstFileInfo.Size() {
+		return false, nil
+	}
+
+	srcData, err := os.ReadFile(srcFilePath)
+	if err != nil {
+		return false, err
+	}
+	srcDigest := xxhash.Sum64(srcData)
+	dstData, err := os.ReadFile(dstFilePath)
+	if err != nil {
+		return false, err
+	}
+	dstDigest := xxhash.Sum64(dstData)
+
+	if srcDigest != dstDigest {
+		return false, err
+	}
+	return true, nil
 }
 
 func copyFile(srcFilePath, dstFilePath string) {

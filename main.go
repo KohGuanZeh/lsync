@@ -28,6 +28,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error getting absolute path: %v\n", err)
 	}
+	err = getLsyncDir(src)
+	if err != nil {
+		log.Fatalf("Error accessing source .lsync directory: %v\n", err)
+	}
+	err = getLsyncDir(dst)
+	if err != nil {
+		log.Fatalf("Error accessing destination .lsync directory: %v\n", err)
+	}
 	srcDirInfo, err := getDirInfo(src)
 	if err != nil {
 		log.Fatalf("Error reading directory: %v\n", err)
@@ -62,6 +70,9 @@ func getDirInfo(absDirPath string) (DirInfo, error) {
 	for _, item := range items {
 		if item.IsDir() {
 			dirName := item.Name()
+			if dirName == ".lsync" {
+				continue
+			}
 			subdirInfo, err := getDirInfo(filepath.Join(absDirPath, dirName))
 			if err != nil {
 				fmt.Printf("Error reading directory: %v\n", err)
@@ -185,4 +196,16 @@ func copyFile(srcFilePath, dstFilePath string) {
 		fmt.Printf("Failed to copy file: %v\n", err)
 	}
 	fmt.Println("FILE COPIED")
+}
+
+func getLsyncDir(path string) error {
+	lsyncDir := filepath.Join(path, ".lsync")
+	_, err := os.Stat(lsyncDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		os.Mkdir(lsyncDir, 0755)
+	}
+	return nil
 }

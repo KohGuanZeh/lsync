@@ -24,6 +24,5 @@ go.work.sum
 # env file
 .env
 
-# Test folders for syncing
-test-1
-test-2
+# Build folder
+build

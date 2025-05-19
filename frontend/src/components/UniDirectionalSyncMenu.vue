@@ -1,23 +1,29 @@
 <script lang="ts" setup>
-import { reactive } from 'vue'
+import { ref } from 'vue'
 import { SelectDirectory } from '../../wailsjs/go/main/App'
 
-type DirType = "src" | "dst";
+enum DirType {
+    Src = "src",
+    Dst = "dst"
+}
 
-const data = reactive({
-    srcDir: "",
-    dstDir: ""
-})
+const srcDir = ref("");
+const dstDir = ref("");
 
 function selectFolder(dirType: DirType) {
-    const title = dirType == "src" ? "Source Directory" : "Destination Directory";
+    let title = "Select Source Directory";
+    let dirRef = srcDir;
+    if (dirType != DirType.Src) {
+        title = "Select Destination Directory";
+        dirRef = dstDir;
+    }
     SelectDirectory(title).then(res => {
-        if (dirType == "src") {
-            data.srcDir = res;
-            return;
+        if (res.length != 0) {
+            dirRef.value = res;
         }
-        data.dstDir = res;
-    })
+    }, err => {
+        console.log(err);
+    });
 }
 
 </script>
@@ -28,23 +34,23 @@ function selectFolder(dirType: DirType) {
             <div id="src-input" class="dir-select-container">
                 <label for="src-dir">Source</label>
                 <div class="dir-select">
-                    <input id="src-dir" name="src-dir" v-model="data.srcDir" placeholder="Select Source Folder"
+                    <input id="src-dir" name="src-dir" v-model="srcDir" placeholder="Select Source Folder"
                         autocomplete="off" type="text" />
-                    <button @click="selectFolder('src')">Select Folder</button>
+                    <button @click="selectFolder(DirType.Src)">Select Folder</button>
                 </div>
             </div>
             <div id="dst-input" class="dir-select-container">
                 <label for="dst-dir">Destination</label>
                 <div class="dir-select">
-                    <input id="dst-dir" name="dst-dir" v-model="data.dstDir" placeholder="Select Destination Folder"
+                    <input id="dst-dir" name="dst-dir" v-model="dstDir" placeholder="Select Destination Folder"
                         autocomplete="off" type="text" />
-                    <button @click="selectFolder('dst')">Select Folder</button>
+                    <button @click="selectFolder(DirType.Dst)">Select Folder</button>
                 </div>
             </div>
-            <button class="sync-button">
+            <button class="btn-only">
                 Preview
             </button>
-            <button class="sync-button">
+            <button class="btn-only">
                 Sync
             </button>
         </section>
@@ -57,7 +63,7 @@ main {
     display: flex;
 }
 
-.sync-button {
+.btn-only {
     margin-top: auto;
     max-height: fit-content;
 }

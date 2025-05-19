@@ -1,10 +1,8 @@
-package main
+package internal
 
 import (
-	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,69 +10,26 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
-type DirSyncData struct {
+type DirStruct struct {
 	files map[string]FileSyncData
-	dirs  map[string]DirSyncData
+	dirs  map[string]DirStruct
 }
 
 type FileSyncData struct {
 	hashExists   bool
 	contentHash  uint64
 	lastModified time.Time
-}
-
-func main() {
-	start := time.Now()
-	src, dst := parseFlags()
-	src, err := filepath.Abs(src)
-	if err != nil {
-		log.Fatalf("Error getting absolute path: %v\n", err)
-	}
-	dst, err = filepath.Abs(dst)
-	if err != nil {
-		log.Fatalf("Error getting absolute path: %v\n", err)
-	}
-	err = getLsyncDir(src)
-	if err != nil {
-		log.Fatalf("Error accessing source .lsync directory: %v\n", err)
-	}
-	err = getLsyncDir(dst)
-	if err != nil {
-		log.Fatalf("Error accessing destination .lsync directory: %v\n", err)
-	}
-	srcDirInfo, err := getDirInfo(src)
-	if err != nil {
-		log.Fatalf("Error reading directory: %v\n", err)
-	}
-	dstDirInfo, err := getDirInfo(dst)
-	if err != nil {
-		log.Fatalf("Error reading directory: %v\n", err)
-	}
-	syncDirs(src, dst, srcDirInfo, dstDirInfo)
-	writeLsyncDir(src, srcDirInfo)
-	writeLsyncDir(dst, srcDirInfo)
-	fmt.Printf("Time taken: %s", time.Since(start))
-}
-
-// Parse flags required to run the program.
-func parseFlags() (string, string) {
-	srcPtr := flag.String("from", "./build/test-1", "Directory with files to sync from")
-	flag.StringVar(srcPtr, "f", *srcPtr, "Alias for src")
-	dstPtr := flag.String("to", "./build/test-2", "Directory with files to sync to")
-	flag.StringVar(dstPtr, "t", *dstPtr, "Alias for dst")
-	flag.Parse()
-	return *srcPtr, *dstPtr
-}
+} 
 
 // Map directory info
-func getDirInfo(absDirPath string) (DirSyncData, error) {
-	dirInfo := DirSyncData{}
+func getDirInfo(absDirPath string) (DirStruct, error) {
+	dirInfo := DirStruct{}
 	items, err := os.ReadDir(absDirPath)
 	if err != nil {
 		return dirInfo, err
 	}
 	dirInfo.files = make(map[string]FileSyncData)
-	dirInfo.dirs = make(map[string]DirSyncData)
+	dirInfo.dirs = make(map[string]DirStruct)
 	for _, item := range items {
 		if item.IsDir() {
 			dirName := item.Name()
@@ -102,7 +57,7 @@ func getDirInfo(absDirPath string) (DirSyncData, error) {
 	return dirInfo, nil
 }
 
-func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirSyncData) {
+func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirStruct) {
 	for fileName := range srcDirInfo.files {
 		srcFilePath := filepath.Join(srcPath, fileName)
 		dstFilePath := filepath.Join(dstPath, fileName)
@@ -145,9 +100,9 @@ func syncDirs(srcPath, dstPath string, srcDirInfo, dstDirInfo DirSyncData) {
 				fmt.Printf("Cannot create subdirectory: %v\n", err)
 				continue
 			}
-			dstSubDirInfo = DirSyncData{
+			dstSubDirInfo = DirStruct{
 				files: make(map[string]FileSyncData),
-				dirs:  make(map[string]DirSyncData),
+				dirs:  make(map[string]DirStruct),
 			}
 		}
 		syncDirs(srcSubDirPath, dstSubDirPath, srcSubDirInfo, dstSubDirInfo)
@@ -210,29 +165,4 @@ func copyFile(srcFilePath, dstFilePath string) {
 		fmt.Printf("Failed to copy file: %v\n", err)
 	}
 	fmt.Println("FILE COPIED")
-}
-
-func getLsyncDir(path string) error {
-	lsyncDir := filepath.Join(path, ".lsync")
-	_, err := os.Stat(lsyncDir)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		os.Mkdir(lsyncDir, 0755)
-	}
-	return nil
-}
-
-func writeLsyncDir(path string, dirInfo DirSyncData) error {
-	lsyncDir := filepath.Join(path, ".lsync")
-	// Directory should exist with getLsyncDir
-	_, err := os.Stat(lsyncDir)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		os.Mkdir(lsyncDir, 0755)
-	}
-	return nil
 }

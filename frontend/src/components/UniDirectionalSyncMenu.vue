@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { ref } from 'vue'
-import { SelectDirectory } from '../../wailsjs/go/main/App'
+import { SelectDirectory } from "../../wailsjs/go/backend/App"
 
 enum DirType {
     Src = "src",
@@ -47,10 +47,10 @@ function selectFolder(dirType: DirType) {
                     <button @click="selectFolder(DirType.Dst)">Select Folder</button>
                 </div>
             </div>
-            <button class="btn-only">
+            <button class="btn">
                 Preview
             </button>
-            <button class="btn-only">
+            <button class="btn">
                 Sync
             </button>
         </section>
@@ -63,7 +63,7 @@ main {
     display: flex;
 }
 
-.btn-only {
+.btn {
     margin-top: auto;
     max-height: fit-content;
 }

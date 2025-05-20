@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"lsync/backend"
+	"lsync/backend/pkg/dirsyncmap"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -15,6 +16,16 @@ var assets embed.FS
 func main() {
 	// Create an instance of the app structure
 	app := backend.NewApp()
+	dirSyncStruct := dirsyncmap.DirSyncStruct{}
+	var dirSyncStatus = []struct {
+		Value  dirsyncmap.SyncStatus
+		TSName string
+	}{
+		{dirsyncmap.StatusNone, "None"},
+		{dirsyncmap.StatusCreated, "Created"},
+		{dirsyncmap.StatusModified, "Modified"},
+		{dirsyncmap.StatusDeleted, "Deleted"},
+	}
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -28,6 +39,10 @@ func main() {
 		OnStartup:        app.Startup,
 		Bind: []interface{}{
 			app,
+			&dirSyncStruct,
+		},
+		EnumBind: []interface{}{
+			dirSyncStatus,
 		},
 	})
 

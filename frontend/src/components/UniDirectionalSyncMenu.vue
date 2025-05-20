@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { ref } from 'vue'
-import { SelectDirectory } from "../../wailsjs/go/backend/App"
+import { PreviewSync, SelectDirectory } from "../../wailsjs/go/backend/App"
 
 enum DirType {
     Src = "src",
@@ -26,6 +26,14 @@ function selectFolder(dirType: DirType) {
     });
 }
 
+function previewSync() {
+    PreviewSync(srcDir.value, dstDir.value).then(res => {
+        console.log(res);
+    }, err => {
+        console.log(err);
+    })
+}
+
 </script>
 
 <template>
@@ -47,7 +55,7 @@ function selectFolder(dirType: DirType) {
                     <button @click="selectFolder(DirType.Dst)">Select Folder</button>
                 </div>
             </div>
-            <button class="btn">
+            <button class="btn" @click="previewSync">
                 Preview
             </button>
             <button class="btn">

@@ -1,6 +1,8 @@
 <script lang="ts" setup>
 import { ref } from 'vue'
 import { PreviewSync, SelectDirectory } from "../../wailsjs/go/backend/App"
+import SyncPreviewTree from './SyncPreviewTree.vue';
+import { dirsyncmap } from '../../wailsjs/go/models';
 
 enum DirType {
     Src = "src",
@@ -9,6 +11,7 @@ enum DirType {
 
 const srcDir = ref("");
 const dstDir = ref("");
+const dirPreview = ref<dirsyncmap.DirSyncStruct | undefined>(undefined);
 
 function selectFolder(dirType: DirType) {
     let title = "Select Source Directory";
@@ -20,6 +23,7 @@ function selectFolder(dirType: DirType) {
     SelectDirectory(title).then(res => {
         if (res.length != 0) {
             dirRef.value = res;
+            dirPreview.value = undefined;
         }
     }, err => {
         console.log(err);
@@ -28,9 +32,10 @@ function selectFolder(dirType: DirType) {
 
 function previewSync() {
     PreviewSync(srcDir.value, dstDir.value).then(res => {
-        console.log(res);
+        dirPreview.value = res;
     }, err => {
         console.log(err);
+        dirPreview.value = undefined;
     })
 }
 
@@ -62,6 +67,9 @@ function previewSync() {
                 Sync
             </button>
         </section>
+        <section>
+            <SyncPreviewTree :dirPreview="dirPreview" :dirName="dstDir"></SyncPreviewTree>
+        </section>
     </main>
 </template>
 
@@ -69,6 +77,7 @@ function previewSync() {
 main {
     width: 100%;
     display: flex;
+    flex-direction: column;
 }
 
 .btn {

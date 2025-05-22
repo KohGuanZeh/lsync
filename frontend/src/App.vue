@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import UniDirectionalSyncMenu from './components/UniDirectionalSyncMenu.vue';
+import UniDirectionalSyncPage from './components/UniDirectionalSyncPage.vue';
 </script>
 
 <template>
-    <UniDirectionalSyncMenu></UniDirectionalSyncMenu>
+    <UniDirectionalSyncPage></UniDirectionalSyncPage>
 </template>
 
 <style></style>

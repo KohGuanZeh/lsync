@@ -22,6 +22,7 @@ function getClassFromSyncStatus(status?: string): string {
 }
 </script>
 
+<!-- Need to add key for v-for -->
 <template>
     <ul>
         <li>

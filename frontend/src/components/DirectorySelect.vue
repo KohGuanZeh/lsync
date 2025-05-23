@@ -29,7 +29,7 @@ const props = defineProps({
         default: ""
     }
 });
-const emit = defineEmits(['update-dir-value']);
+const emit = defineEmits<{ (e: 'update-dir-value', dirType: DirType, newDirVal: string): void }>();
 const label = getLabel(props.dirType);
 
 watch(() => props.dirVal, (newDirVal) => {
@@ -52,10 +52,10 @@ function selectDirectory() {
     <div class="dir-select-container">
         <label :for="`${dirType}-dir`">{{ label }}</label>
         <div class="dir-select-controls">
-            <input :name="`${dirType}-dir`" v-model="props.dirVal" :placeholder="`Select ${label} Directory`"
-                autocomplete="off" type="text" />
-            <button @click="selectDirectory">
-                <img class="img-btn" src="../assets/images/icons/folder-solid.svg" alt="select-dir-icon">
+            <input :name="`${dirType}-dir`" v-model="props.dirVal" :placeholder="`Select ${label} Directory...`"
+                class="dir-select-input" autocomplete="off" type="text" />
+            <button class="dir-select-btn" @click="selectDirectory">
+                <i class="fa-solid fa-folder"></i>
             </button>
         </div>
     </div>
@@ -72,9 +72,14 @@ function selectDirectory() {
     display: flex;
 }
 
-.img-btn {
+.dir-select-input {
+    flex: 1;
+    border-radius: 0.25rem 0 0 0.25rem;
+}
+
+.dir-select-btn {
+    border-radius: 0 0.25rem 0.25rem 0;
+    padding: 0.5rem 1rem;
     margin: auto;
-    width: 1rem;
-    height: 1rem;
 }
 </style>

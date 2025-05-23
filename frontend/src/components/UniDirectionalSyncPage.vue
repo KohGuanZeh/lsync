@@ -27,37 +27,58 @@ function previewSync() {
 
 <template>
     <main>
-        <section class="lsync-controls">
-            <DirectorySelect :dirType="DirType.Src" :dirVal="srcDir" @update-dir-value="updateDirVal"></DirectorySelect>
-            <DirectorySelect :dirType="DirType.Dst" :dirVal="dstDir" @update-dir-value="updateDirVal"></DirectorySelect>
-            <button class="btn" @click="previewSync">
-                Preview
-            </button>
-            <button class="btn">
-                Sync
-            </button>
+        <section class="uni-dir-sync">
+            <section class="dir-select">
+                <DirectorySelect :dirType="DirType.Src" :dirVal="srcDir" @update-dir-value="updateDirVal">
+                </DirectorySelect>
+                <DirectorySelect :dirType="DirType.Dst" :dirVal="dstDir" @update-dir-value="updateDirVal">
+                </DirectorySelect>
+            </section>
+            <section class="sync-controls">
+                <button class="sync-control-btn" @click="previewSync">Preview</button>
+                <button class="sync-control-btn">Sync</button>
+            </section>
         </section>
-        <section>
+        <section class="dir-sync-preview" v-if="dirPreview">
             <SyncPreviewTree :dirPreview="dirPreview" :dirName="dstDir"></SyncPreviewTree>
         </section>
     </main>
 </template>
 
 <style scoped>
-main {
+.uni-dir-sync {
     width: 100%;
     display: flex;
     flex-direction: column;
 }
 
-.btn {
-    margin-top: auto;
-    max-height: fit-content;
+.dir-select {
+    width: 100%;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    padding-bottom: 1.5rem;
 }
 
-.lsync-controls {
+.sync-controls {
+    width: 100%;
     margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    padding-bottom: 1.5rem;
+}
+
+.sync-control-btn {
+    flex: 1;
+    text-align: center;
+}
+
+.dir-sync-preview {
+    background-color: #505050;
+    border-radius: 0.25rem;
+    padding: 1rem;
     display: flex;
-    gap: 3rem;
 }
 </style>

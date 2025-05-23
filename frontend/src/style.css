@@ -12,7 +12,8 @@ html {
 }
 
 body {
-    margin: 1rem 2rem;
+    margin: 0;
+    padding: 1rem 2rem;
     min-width: 640px;
     color: white;
     font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
@@ -26,8 +27,10 @@ button, input[type="button"], input[type="submit"] {
     padding: 0.5rem 0.75rem;
     border-radius: 0.25rem;
     border: none;
-    background-color: #606060;
+    outline: none;
+    background-color: #007bff;
     color: white;
+    font-weight: bold;
     cursor: pointer;
     -webkit-font-smoothing: antialiased;
 }

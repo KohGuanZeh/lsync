@@ -6,4 +6,4 @@ import UniDirectionalSyncPage from './components/UniDirectionalSyncPage.vue';
     <UniDirectionalSyncPage></UniDirectionalSyncPage>
 </template>
 
-<style></style>
+<style scoped></style>

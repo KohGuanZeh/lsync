@@ -30,7 +30,7 @@ function getClassFromSyncStatus(status?: string): string {
                 <summary :class="getClassFromSyncStatus(dirPreview?.Status)">{{ dirName }}</summary>
                 <SyncPreviewTree v-for="(v, k) in dirPreview?.Subdirs" :dir-name="k" :dir-preview="v">
                 </SyncPreviewTree>
-                <ul>
+                <ul v-if="dirPreview && Object.keys(dirPreview.Files).length > 0">
                     <li v-for="(v, k) in dirPreview?.Files" :class="getClassFromSyncStatus(v)">{{ k }}</li>
                 </ul>
             </details>
@@ -39,6 +39,13 @@ function getClassFromSyncStatus(status?: string): string {
 </template>
 
 <style scoped>
+ul {
+    flex: 1;
+    list-style: none;
+    padding-left: 0;
+    margin: 0.5rem 0;
+}
+
 .modified {
     background-color: #ffbf0077;
     color: #ffbf00;

@@ -28,11 +28,13 @@ function getClassFromSyncStatus(status?: string): string {
         <li>
             <details open>
                 <summary :class="getClassFromSyncStatus(dirPreview?.Status)">{{ dirName }}</summary>
-                <SyncPreviewTree v-for="(v, k) in dirPreview?.Subdirs" :dir-name="k" :dir-preview="v">
-                </SyncPreviewTree>
-                <ul v-if="dirPreview && Object.keys(dirPreview.Files).length > 0">
-                    <li v-for="(v, k) in dirPreview?.Files" :class="getClassFromSyncStatus(v)">{{ k }}</li>
-                </ul>
+                <div class="list-children">
+                    <SyncPreviewTree v-for="(v, k) in dirPreview?.Subdirs" :dir-name="k" :dir-preview="v">
+                    </SyncPreviewTree>
+                    <ul v-if="dirPreview && Object.keys(dirPreview.Files).length > 0">
+                        <li v-for="(v, k) in dirPreview?.Files" :class="getClassFromSyncStatus(v)">{{ k }}</li>
+                    </ul>
+                </div>
             </details>
         </li>
     </ul>
@@ -46,18 +48,19 @@ ul {
     margin: 0.5rem 0;
 }
 
+.list-children {
+    padding-left: 1rem;
+}
+
 .modified {
-    background-color: #ffbf0077;
     color: #ffbf00;
 }
 
 .created {
-    background-color: #00800077;
-    color: #008000;
+    color: #00a515;
 }
 
 .deleted {
-    background-color: #ba000077;
-    color: #ba0000;
+    color: #d20000;
 }
 </style>

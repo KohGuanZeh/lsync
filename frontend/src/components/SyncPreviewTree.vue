@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import { dirsyncmap } from '../../wailsjs/go/models';
+import { sync } from '../../wailsjs/go/models';
 
 defineProps({
     dirName: String,
-    dirPreview: dirsyncmap.DirSyncStruct
+    dirPreview: sync.SyncPreview
 })
 
 function getClassFromSyncStatus(status?: string): string {
@@ -11,11 +11,11 @@ function getClassFromSyncStatus(status?: string): string {
         return ""
     }
     switch (status) {
-        case dirsyncmap.SyncStatus.Created:
+        case sync.SyncStatus.Created:
             return "created";
-        case dirsyncmap.SyncStatus.Modified:
+        case sync.SyncStatus.Modified:
             return "modified";
-        case dirsyncmap.SyncStatus.Deleted:
+        case sync.SyncStatus.Deleted:
             return "deleted";
     }
     return ""

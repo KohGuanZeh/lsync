@@ -9,3 +9,7 @@ export function PreviewSync(arg1, arg2) {
 export function SelectDirectory(arg1) {
   return window['go']['backend']['App']['SelectDirectory'](arg1);
 }
+
+export function SyncWithPreview(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['SyncWithPreview'](arg1, arg2, arg3);
+}

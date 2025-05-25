@@ -3,7 +3,7 @@ package backend
 import (
 	"log"
 	"lsync/backend/internal/dirmap"
-	"lsync/backend/pkg/dirsyncmap"
+	"lsync/backend/pkg/sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -20,14 +20,18 @@ func (a *App) SelectDirectory(title string) string {
 	return dir
 }
 
-func (a *App) PreviewSync(src, dst string) (dirsyncmap.DirSyncStruct, error) {
+func (a *App) PreviewSync(src, dst string) (sync.SyncPreview, error) {
 	srcDirStruct, err := dirmap.GetDirStruct(src)
 	if err != nil {
-		return dirsyncmap.DirSyncStruct{}, err
+		return sync.SyncPreview{}, err
 	}
 	dstDirStruct, err := dirmap.GetDirStruct(dst)
 	if err != nil {
-		return dirsyncmap.DirSyncStruct{}, err
+		return sync.SyncPreview{}, err
 	}
-	return dirsyncmap.GetDirSyncStruct(srcDirStruct, dstDirStruct), nil
+	return sync.PreviewSync(srcDirStruct, dstDirStruct), nil
+}
+
+func (a *App) SyncWithPreview(src, dst string, preview sync.SyncPreview) error {
+	return sync.SyncWithPreview(src, dst, preview)
 }

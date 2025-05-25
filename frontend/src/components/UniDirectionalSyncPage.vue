@@ -1,13 +1,13 @@
 <script lang="ts" setup>
 import { ref } from 'vue'
-import { PreviewSync, SelectDirectory } from '../../wailsjs/go/backend/App'
+import { PreviewSync, SyncWithPreview } from '../../wailsjs/go/backend/App'
 import SyncPreviewTree from './SyncPreviewTree.vue';
-import { dirsyncmap } from '../../wailsjs/go/models';
+import { sync } from '../../wailsjs/go/models';
 import DirectorySelect, { DirType } from './DirectorySelect.vue'
 
 const srcDir = ref("");
 const dstDir = ref("");
-const dirPreview = ref<dirsyncmap.DirSyncStruct | undefined>(undefined);
+const dirPreview = ref<sync.SyncPreview | undefined>(undefined);
 
 function updateDirVal(dirType: DirType, newDirVal: string) {
     const refDir = dirType == DirType.Src ? srcDir : dstDir;
@@ -16,12 +16,27 @@ function updateDirVal(dirType: DirType, newDirVal: string) {
 }
 
 function previewSync() {
+    if (!srcDir.value || !dstDir.value) {
+        return;
+    }
     PreviewSync(srcDir.value, dstDir.value).then(res => {
         dirPreview.value = res;
     }, err => {
         console.log(err);
         dirPreview.value = undefined;
     })
+}
+
+function syncFolders() {
+    if (!dirPreview.value) {
+        return;
+    }
+    SyncWithPreview(srcDir.value, dstDir.value, dirPreview.value).then(res => {
+        console.log("Success");
+    }, err => {
+        console.log(err);
+    })
+    dirPreview.value = undefined;
 }
 </script>
 
@@ -35,8 +50,8 @@ function previewSync() {
                 </DirectorySelect>
             </section>
             <section class="sync-controls">
-                <button class="sync-control-btn" @click="previewSync">Preview</button>
-                <button class="sync-control-btn">Sync</button>
+                <button class="btn" @click="previewSync">Preview</button>
+                <button class="btn" @click="syncFolders">Sync</button>
             </section>
         </section>
         <section class="dir-sync-preview" v-if="dirPreview">
@@ -70,12 +85,13 @@ function previewSync() {
     padding-bottom: 1.5rem;
 }
 
-.sync-control-btn {
+.btn {
     flex: 1;
-    text-align: center;
 }
 
 .dir-sync-preview {
+    max-height: 70vh;
+    min-height: 512px;
     background-color: #505050;
     border-radius: 0.25rem;
     padding: 1rem;

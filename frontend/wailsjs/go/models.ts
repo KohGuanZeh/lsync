@@ -1,4 +1,4 @@
-export namespace dirsyncmap {
+export namespace sync {
 	
 	export enum SyncStatus {
 	    None = "None",
@@ -6,19 +6,19 @@ export namespace dirsyncmap {
 	    Modified = "Modified",
 	    Deleted = "Deleted",
 	}
-	export class DirSyncStruct {
+	export class SyncPreview {
 	    Status: SyncStatus;
-	    Subdirs: Record<string, DirSyncStruct>;
+	    Subdirs: Record<string, SyncPreview>;
 	    Files: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
-	        return new DirSyncStruct(source);
+	        return new SyncPreview(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.Status = source["Status"];
-	        this.Subdirs = this.convertValues(source["Subdirs"], DirSyncStruct, true);
+	        this.Subdirs = this.convertValues(source["Subdirs"], SyncPreview, true);
 	        this.Files = source["Files"];
 	    }
 	

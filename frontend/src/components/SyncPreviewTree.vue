@@ -1,12 +1,39 @@
 <script lang="ts" setup>
+import { computed, PropType } from 'vue';
 import { sync } from '../../wailsjs/go/models';
 
-defineProps({
-    dirName: String,
-    dirPreview: sync.SyncPreview
+const props = defineProps({
+    dirPath: {
+        type: String,
+        required: true
+    },
+    dirName: {
+        type: String,
+        required: true
+    },
+    dirPreview: {
+        type: Object as PropType<sync.SyncPreview>,
+        required: true
+    }
 })
 
-function getClassFromSyncStatus(status?: string): string {
+const subdirs = computed(() => Object.entries(props.dirPreview.Subdirs).map(kv => {
+    return {
+        name: kv[0],
+        path: pathJoin(props.dirPath, kv[0]),
+        preview: kv[1]
+    };
+}));
+
+const files = computed(() => Object.entries(props.dirPreview.Files).map(kv => {
+    return {
+        name: kv[0],
+        class: getClassFromSyncStatus(kv[1]),
+        key: pathJoin(props.dirPath, kv[0])
+    };
+}));
+
+function getClassFromSyncStatus(status: string): string {
     if (!status) {
         return ""
     }
@@ -20,6 +47,10 @@ function getClassFromSyncStatus(status?: string): string {
     }
     return ""
 }
+
+function pathJoin(path: string, name: string): string {
+    return `${path}\\${name}`;
+}
 </script>
 
 <!-- Need to add key for v-for -->
@@ -27,12 +58,14 @@ function getClassFromSyncStatus(status?: string): string {
     <ul>
         <li>
             <details open>
-                <summary :class="getClassFromSyncStatus(dirPreview?.Status)">{{ dirName }}</summary>
+                <summary :class="getClassFromSyncStatus(dirPreview.Status)">{{ dirName }}</summary>
                 <div class="list-children">
-                    <SyncPreviewTree v-for="(v, k) in dirPreview?.Subdirs" :dir-name="k" :dir-preview="v">
+                    <SyncPreviewTree v-for="v in subdirs" :key="v.path" :dir-path="v.path" :dir-name="v.name"
+                        :dir-preview="v.preview">
                     </SyncPreviewTree>
                     <ul v-if="dirPreview && Object.keys(dirPreview.Files).length > 0">
-                        <li v-for="(v, k) in dirPreview?.Files" :class="getClassFromSyncStatus(v)">{{ k }}</li>
+                        <li v-for="v in files" :class="v.class" :key="v.key">{{ v.name }}
+                        </li>
                     </ul>
                 </div>
             </details>
@@ -46,6 +79,14 @@ ul {
     list-style: none;
     padding-left: 0;
     margin: 0.5rem 0;
+}
+
+summary {
+    cursor: pointer;
+}
+
+li {
+    text-wrap-mode: nowrap;
 }
 
 .list-children {

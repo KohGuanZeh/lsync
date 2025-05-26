@@ -11,8 +11,10 @@ const dirPreview = ref<sync.SyncPreview | undefined>(undefined);
 
 function updateDirVal(dirType: DirType, newDirVal: string) {
     const refDir = dirType == DirType.Src ? srcDir : dstDir;
-    refDir.value = newDirVal;
-    dirPreview.value = undefined;
+    if (refDir.value != newDirVal) {
+        refDir.value = newDirVal;
+        dirPreview.value = undefined;
+    }
 }
 
 function previewSync() {
@@ -24,7 +26,7 @@ function previewSync() {
     }, err => {
         console.log(err);
         dirPreview.value = undefined;
-    })
+    });
 }
 
 function syncFolders() {
@@ -35,8 +37,8 @@ function syncFolders() {
         console.log("Success");
     }, err => {
         console.log(err);
-    })
-    dirPreview.value = undefined;
+    });
+    previewSync();
 }
 </script>
 
@@ -55,7 +57,7 @@ function syncFolders() {
             </section>
         </section>
         <section class="dir-sync-preview" v-if="dirPreview">
-            <SyncPreviewTree :dirPreview="dirPreview" :dirName="dstDir"></SyncPreviewTree>
+            <SyncPreviewTree :dir-path="dstDir" :dirName="dstDir" :dirPreview="dirPreview"></SyncPreviewTree>
         </section>
     </main>
 </template>

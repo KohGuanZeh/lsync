@@ -80,7 +80,7 @@ func PreviewSync(src, dst dirmap.DirStruct) SyncPreview {
 	return dirSyncStruct
 }
 
-func SyncWithPreview(src, dst string, preview SyncPreview) error {
+func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) error {
 	switch preview.Status {
 	case StatusCreated:
 		err := os.Mkdir(dst, 0755)
@@ -106,6 +106,9 @@ func SyncWithPreview(src, dst string, preview SyncPreview) error {
 					return err
 				}
 			case StatusDeleted:
+				if ignoreDelete {
+					break
+				}
 				err := os.Remove(dstPath)
 				if err != nil {
 					return err
@@ -113,6 +116,9 @@ func SyncWithPreview(src, dst string, preview SyncPreview) error {
 			}
 		}
 	case StatusDeleted:
+		if ignoreDelete {
+			break
+		}
 		err := os.RemoveAll(dst)
 		if err != nil {
 			return err
@@ -123,7 +129,7 @@ func SyncWithPreview(src, dst string, preview SyncPreview) error {
 		for subdir, subdirPreview := range preview.Subdirs {
 			srcPath := filepath.Join(src, subdir)
 			dstPath := filepath.Join(dst, subdir)
-			err := SyncWithPreview(srcPath, dstPath, subdirPreview)
+			err := SyncWithPreview(srcPath, dstPath, subdirPreview, ignoreDelete)
 			if err != nil {
 				return err
 			}

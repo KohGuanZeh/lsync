@@ -32,6 +32,6 @@ func (a *App) PreviewSync(src, dst string) (sync.SyncPreview, error) {
 	return sync.PreviewSync(srcDirStruct, dstDirStruct), nil
 }
 
-func (a *App) SyncWithPreview(src, dst string, preview sync.SyncPreview) error {
-	return sync.SyncWithPreview(src, dst, preview)
+func (a *App) SyncWithPreview(src, dst string, preview sync.SyncPreview, ignoreDelete bool) error {
+	return sync.SyncWithPreview(src, dst, preview, ignoreDelete)
 }

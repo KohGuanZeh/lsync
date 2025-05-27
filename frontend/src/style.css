@@ -41,6 +41,7 @@ input {
     border:none;
     outline: none;
     background-color: #454545;
+    accent-color: #007bff;
     color: white;
     -webkit-font-smoothing: antialiased;
 }

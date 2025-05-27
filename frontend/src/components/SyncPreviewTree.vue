@@ -14,6 +14,10 @@ const props = defineProps({
     dirPreview: {
         type: Object as PropType<sync.SyncPreview>,
         required: true
+    },
+    ignoreDeleted: {
+        type: Boolean,
+        required: true
     }
 })
 
@@ -43,7 +47,7 @@ function getClassFromSyncStatus(status: string): string {
         case sync.SyncStatus.Modified:
             return "modified";
         case sync.SyncStatus.Deleted:
-            return "deleted";
+            return props.ignoreDeleted ? "ignored" : "deleted";
     }
     return ""
 }
@@ -61,7 +65,7 @@ function pathJoin(path: string, name: string): string {
                 <summary :class="getClassFromSyncStatus(dirPreview.Status)">{{ dirName }}</summary>
                 <div class="list-children">
                     <SyncPreviewTree v-for="v in subdirs" :key="v.path" :dir-path="v.path" :dir-name="v.name"
-                        :dir-preview="v.preview">
+                        :dir-preview="v.preview" :ignore-deleted="props.ignoreDeleted">
                     </SyncPreviewTree>
                     <ul v-if="dirPreview && Object.keys(dirPreview.Files).length > 0">
                         <li v-for="v in files" :class="v.class" :key="v.key">{{ v.name }}
@@ -103,5 +107,9 @@ li {
 
 .deleted {
     color: #d20000;
+}
+
+.ignored {
+    color: #a0a0a0;
 }
 </style>

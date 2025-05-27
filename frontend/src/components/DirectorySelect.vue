@@ -52,8 +52,8 @@ function selectDirectory() {
     <div class="dir-select-container">
         <label :for="`${dirType}-dir`">{{ label }}</label>
         <div class="dir-select-controls">
-            <input :name="`${dirType}-dir`" v-model="props.dirVal" :placeholder="`Select ${label} Directory...`"
-                class="dir-select-input" autocomplete="off" type="text" />
+            <input :name="`${dirType}-dir`" :id="`${dirType}-dir`" v-model="props.dirVal"
+                :placeholder="`Select ${label} Directory...`" class="dir-select-input" autocomplete="off" type="text" />
             <button class="dir-select-btn" @click="selectDirectory">
                 <i class="fa-solid fa-folder"></i>
             </button>

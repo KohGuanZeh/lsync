@@ -6,4 +6,4 @@ export function PreviewSync(arg1:string,arg2:string):Promise<sync.SyncPreview>;
 
 export function SelectDirectory(arg1:string):Promise<string>;
 
-export function SyncWithPreview(arg1:string,arg2:string,arg3:sync.SyncPreview):Promise<void>;
+export function SyncWithPreview(arg1:string,arg2:string,arg3:sync.SyncPreview,arg4:boolean):Promise<void>;

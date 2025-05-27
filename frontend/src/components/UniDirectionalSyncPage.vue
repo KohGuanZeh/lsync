@@ -1,39 +1,47 @@
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { reactive, ref, toRef } from 'vue'
 import { PreviewSync, SyncWithPreview } from '../../wailsjs/go/backend/App'
 import SyncPreviewTree from './SyncPreviewTree.vue';
 import { sync } from '../../wailsjs/go/models';
 import DirectorySelect, { DirType } from './DirectorySelect.vue'
 
-const srcDir = ref("");
-const dstDir = ref("");
-const dirPreview = ref<sync.SyncPreview | undefined>(undefined);
+interface SyncData {
+    srcDir: string,
+    dstDir: string,
+    dirPreview?: sync.SyncPreview
+}
+
+const syncSettings: SyncData = reactive({
+    srcDir: "",
+    dstDir: "",
+    dirPreview: undefined
+});
 
 function updateDirVal(dirType: DirType, newDirVal: string) {
-    const refDir = dirType == DirType.Src ? srcDir : dstDir;
+    const refDir = toRef(syncSettings, dirType == DirType.Src ? "srcDir" : "dstDir");
     if (refDir.value != newDirVal) {
         refDir.value = newDirVal;
-        dirPreview.value = undefined;
+        syncSettings.dirPreview = undefined;
     }
 }
 
 function previewSync() {
-    if (!srcDir.value || !dstDir.value) {
+    if (!syncSettings.srcDir || !syncSettings.dstDir) {
         return;
     }
-    PreviewSync(srcDir.value, dstDir.value).then(res => {
-        dirPreview.value = res;
+    PreviewSync(syncSettings.srcDir, syncSettings.dstDir).then(res => {
+        syncSettings.dirPreview = res;
     }, err => {
         console.log(err);
-        dirPreview.value = undefined;
+        syncSettings.dirPreview = undefined;
     });
 }
 
 function syncFolders() {
-    if (!dirPreview.value) {
+    if (!syncSettings.dirPreview) {
         return;
     }
-    SyncWithPreview(srcDir.value, dstDir.value, dirPreview.value).then(res => {
+    SyncWithPreview(syncSettings.srcDir, syncSettings.dstDir, syncSettings.dirPreview).then(res => {
         console.log("Success");
     }, err => {
         console.log(err);
@@ -46,9 +54,9 @@ function syncFolders() {
     <main>
         <section class="uni-dir-sync">
             <section class="dir-select">
-                <DirectorySelect :dirType="DirType.Src" :dirVal="srcDir" @update-dir-value="updateDirVal">
+                <DirectorySelect :dirType="DirType.Src" :dirVal="syncSettings.srcDir" @update-dir-value="updateDirVal">
                 </DirectorySelect>
-                <DirectorySelect :dirType="DirType.Dst" :dirVal="dstDir" @update-dir-value="updateDirVal">
+                <DirectorySelect :dirType="DirType.Dst" :dirVal="syncSettings.dstDir" @update-dir-value="updateDirVal">
                 </DirectorySelect>
             </section>
             <section class="sync-controls">
@@ -56,8 +64,9 @@ function syncFolders() {
                 <button class="btn" @click="syncFolders">Sync</button>
             </section>
         </section>
-        <section class="dir-sync-preview" v-if="dirPreview">
-            <SyncPreviewTree :dir-path="dstDir" :dirName="dstDir" :dirPreview="dirPreview"></SyncPreviewTree>
+        <section class="dir-sync-preview" v-if="syncSettings.dirPreview">
+            <SyncPreviewTree :dir-path="syncSettings.dstDir" :dirName="syncSettings.dstDir"
+                :dirPreview="syncSettings.dirPreview"></SyncPreviewTree>
         </section>
     </main>
 </template>

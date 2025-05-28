@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed, PropType } from 'vue';
-import { sync } from '../../wailsjs/go/models';
+import { lsync } from '../../wailsjs/go/models';
 
 const props = defineProps({
     dirPath: {
@@ -12,7 +12,7 @@ const props = defineProps({
         required: true
     },
     dirPreview: {
-        type: Object as PropType<sync.SyncPreview>,
+        type: Object as PropType<lsync.SyncPreview>,
         required: true
     },
     ignoreDeleted: {
@@ -42,11 +42,11 @@ function getClassFromSyncStatus(status: string): string {
         return ""
     }
     switch (status) {
-        case sync.SyncStatus.Created:
+        case lsync.SyncStatus.Created:
             return "created";
-        case sync.SyncStatus.Modified:
+        case lsync.SyncStatus.Modified:
             return "modified";
-        case sync.SyncStatus.Deleted:
+        case lsync.SyncStatus.Deleted:
             return props.ignoreDeleted ? "ignored" : "deleted";
     }
     return ""

@@ -1,14 +1,14 @@
 <script lang="ts" setup>
-import { reactive, ref, toRef } from 'vue'
+import { reactive, toRef } from 'vue'
 import { PreviewSync, SyncWithPreview } from '../../wailsjs/go/backend/App'
 import SyncPreviewTree from './SyncPreviewTree.vue';
-import { sync } from '../../wailsjs/go/models';
+import { lsync } from '../../wailsjs/go/models';
 import DirectorySelect, { DirType } from './DirectorySelect.vue'
 
 interface SyncInfo {
     srcDir: string,
     dstDir: string,
-    dirPreview?: sync.SyncPreview
+    dirPreview?: lsync.SyncPreview
     ignoreMissingInSrc: boolean
 }
 

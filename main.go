@@ -3,7 +3,7 @@ package main
 import (
 	"embed"
 	"lsync/backend"
-	"lsync/backend/pkg/sync"
+	"lsync/backend/pkg/lsync"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -16,15 +16,15 @@ var assets embed.FS
 func main() {
 	// Create an instance of the app structure
 	app := backend.NewApp()
-	dirSyncStruct := sync.SyncPreview{}
+	dirSyncStruct := lsync.SyncPreview{}
 	var dirSyncStatus = []struct {
-		Value  sync.SyncStatus
+		Value  lsync.SyncStatus
 		TSName string
 	}{
-		{sync.StatusNone, "None"},
-		{sync.StatusCreated, "Created"},
-		{sync.StatusModified, "Modified"},
-		{sync.StatusDeleted, "Deleted"},
+		{lsync.StatusNone, "None"},
+		{lsync.StatusCreated, "Created"},
+		{lsync.StatusModified, "Modified"},
+		{lsync.StatusDeleted, "Deleted"},
 	}
 
 	// Create application with options

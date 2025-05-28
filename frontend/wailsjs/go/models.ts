@@ -1,4 +1,4 @@
-export namespace sync {
+export namespace lsync {
 	
 	export enum SyncStatus {
 	    None = "None",

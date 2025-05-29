@@ -13,8 +13,20 @@ type DirStruct struct {
 	Subdirs map[string]DirStruct
 }
 
+type DirStructResult struct {
+	DirName   string
+	DirStruct DirStruct
+	Err       error
+}
+
 type FileMetadata struct {
 	ContentHash uint64
+}
+
+type FileMetadataResult struct {
+	FileName     string
+	FileMetadata FileMetadata
+	Err          error
 }
 
 func GetDirStruct(dirPath string) (DirStruct, error) {
@@ -46,6 +58,29 @@ func GetDirStruct(dirPath string) (DirStruct, error) {
 		dirStruct.Files[fileName] = FileMetadata{ContentHash: digest}
 	}
 	return dirStruct, nil
+}
+
+func GetDirStructAsync(dirName string, dirPath string, results chan DirStructResult) {
+	dirStruct := DirStruct{}
+	dirItems, err := os.ReadDir(dirPath)
+	if err != nil {
+		results <- DirStructResult{
+			DirName:   dirName,
+			DirStruct: dirStruct,
+			Err:       err,
+		}
+		return
+	}
+	dirStruct.Files = make(map[string]FileMetadata)
+	dirStruct.Subdirs = make(map[string]DirStruct)
+	for _, dirItem := range dirItems {
+		log.Println(dirItem)
+	}
+	results <- DirStructResult{
+		DirName:   dirName,
+		DirStruct: dirStruct,
+		Err:       nil,
+	}
 }
 
 func MakeEmptyDirStruct() DirStruct {

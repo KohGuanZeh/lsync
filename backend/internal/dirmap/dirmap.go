@@ -62,7 +62,9 @@ func GetDirStruct(dirPath string) (DirStruct, error) {
 }
 
 func GetDirStructAsync(dirName string, dirPath string, ch chan DirStructResult, wg *sync.WaitGroup) {
-	defer wg.Done()
+	if wg != nil {
+		defer wg.Done()
+	}
 	dirStruct := DirStruct{}
 	dirItems, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -73,35 +75,47 @@ func GetDirStructAsync(dirName string, dirPath string, ch chan DirStructResult, 
 		}
 		return
 	}
-	subdirCh := make(chan DirStructResult)
-	fileCh := make(chan FileMetadataResult)
-	var dirWg sync.WaitGroup
+	subdirCh := make(chan DirStructResult, 5)
+	fileCh := make(chan FileMetadataResult, 5)
+	dirItemsWg := new(sync.WaitGroup)
 	for _, dirItem := range dirItems {
-		dirWg.Add(1)
+		dirItemsWg.Add(1)
+		name := dirItem.Name()
+		path := filepath.Join(dirPath, name)
 		if dirItem.IsDir() {
-			continue
+			go GetDirStructAsync(name, path, subdirCh, dirItemsWg)
+		} else {
+			go GetFileMetadataAsync(name, path, fileCh, dirItemsWg)
 		}
-		fileName := dirItem.Name()
-		filePath := filepath.Join(dirPath, fileName)
-		go GetFileMetadataAsync(fileName, filePath, fileCh, &dirWg)
 	}
 
-	go closeChannelsOnWaitDone(fileCh, subdirCh, wg)
+	go closeChannelsOnWaitDone(fileCh, subdirCh, dirItemsWg)
 
 	dirStruct.Files = make(map[string]FileMetadata)
 	dirStruct.Subdirs = make(map[string]DirStruct)
-	for subdirRes := range subdirCh {
-		if subdirRes.Err != nil {
-			log.Println(subdirRes.Err)
-			continue
+	for subdirCh != nil || fileCh != nil {
+		select {
+		case subdirRes, ok := <-subdirCh:
+			if !ok {
+				subdirCh = nil
+				continue
+			}
+			if subdirRes.Err != nil {
+				log.Println(subdirRes.Err)
+				continue
+			}
+			dirStruct.Subdirs[subdirRes.DirName] = subdirRes.DirStruct
+		case fileRes, ok := <-fileCh:
+			if !ok {
+				fileCh = nil
+				continue
+			}
+			if fileRes.Err != nil {
+				log.Println(fileRes.Err)
+				continue
+			}
+			dirStruct.Files[fileRes.FileName] = fileRes.FileMetadata
 		}
-		dirStruct.Subdirs[subdirRes.DirName] = subdirRes.DirStruct
-	}
-	for fileRes := range fileCh {
-		if fileRes.Err != nil {
-			log.Println(fileRes.Err)
-		}
-		dirStruct.Files[fileRes.FileName] = fileRes.FileMetadata
 	}
 
 	ch <- DirStructResult{
@@ -109,14 +123,13 @@ func GetDirStructAsync(dirName string, dirPath string, ch chan DirStructResult, 
 		DirStruct: dirStruct,
 		Err:       nil,
 	}
-	close(ch)
 }
 
 func GetFileMetadataAsync(fileName string, filePath string, ch chan FileMetadataResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	fileMetadata := FileMetadata{}
 	digest, err := hashFileContent(filePath)
-	if err != nil {
+	if err == nil {
 		fileMetadata.ContentHash = digest
 	}
 	ch <- FileMetadataResult{

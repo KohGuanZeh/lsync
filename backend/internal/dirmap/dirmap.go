@@ -73,14 +73,35 @@ func GetDirStructAsync(dirName string, dirPath string, results chan DirStructRes
 	}
 	dirStruct.Files = make(map[string]FileMetadata)
 	dirStruct.Subdirs = make(map[string]DirStruct)
+	fileResultsChan := make(chan FileMetadataResult)
 	for _, dirItem := range dirItems {
-		log.Println(dirItem)
+		if dirItem.IsDir() {
+			continue
+		}
+		fileName := dirItem.Name()
+		filePath := filepath.Join(dirPath, fileName)
+		go GetFileMetadataAsync(fileName, filePath, fileResultsChan)
 	}
 	results <- DirStructResult{
 		DirName:   dirName,
 		DirStruct: dirStruct,
 		Err:       nil,
 	}
+	close(results)
+}
+
+func GetFileMetadataAsync(fileName string, filePath string, results chan FileMetadataResult) {
+	fileMetadata := FileMetadata{}
+	digest, err := hashFileContent(filePath)
+	if err != nil {
+		fileMetadata.ContentHash = digest
+	}
+	results <- FileMetadataResult{
+		FileName:     fileName,
+		FileMetadata: fileMetadata,
+		Err:          err,
+	}
+
 }
 
 func MakeEmptyDirStruct() DirStruct {

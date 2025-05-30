@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/cespare/xxhash/v2"
 )
@@ -60,48 +61,75 @@ func GetDirStruct(dirPath string) (DirStruct, error) {
 	return dirStruct, nil
 }
 
-func GetDirStructAsync(dirName string, dirPath string, results chan DirStructResult) {
+func GetDirStructAsync(dirName string, dirPath string, ch chan DirStructResult, wg *sync.WaitGroup) {
+	defer wg.Done()
 	dirStruct := DirStruct{}
 	dirItems, err := os.ReadDir(dirPath)
 	if err != nil {
-		results <- DirStructResult{
+		ch <- DirStructResult{
 			DirName:   dirName,
 			DirStruct: dirStruct,
 			Err:       err,
 		}
 		return
 	}
-	dirStruct.Files = make(map[string]FileMetadata)
-	dirStruct.Subdirs = make(map[string]DirStruct)
-	fileResultsChan := make(chan FileMetadataResult)
+	subdirCh := make(chan DirStructResult)
+	fileCh := make(chan FileMetadataResult)
+	var dirWg sync.WaitGroup
 	for _, dirItem := range dirItems {
+		dirWg.Add(1)
 		if dirItem.IsDir() {
 			continue
 		}
 		fileName := dirItem.Name()
 		filePath := filepath.Join(dirPath, fileName)
-		go GetFileMetadataAsync(fileName, filePath, fileResultsChan)
+		go GetFileMetadataAsync(fileName, filePath, fileCh, &dirWg)
 	}
-	results <- DirStructResult{
+
+	go closeChannelsOnWaitDone(fileCh, subdirCh, wg)
+
+	dirStruct.Files = make(map[string]FileMetadata)
+	dirStruct.Subdirs = make(map[string]DirStruct)
+	for subdirRes := range subdirCh {
+		if subdirRes.Err != nil {
+			log.Println(subdirRes.Err)
+			continue
+		}
+		dirStruct.Subdirs[subdirRes.DirName] = subdirRes.DirStruct
+	}
+	for fileRes := range fileCh {
+		if fileRes.Err != nil {
+			log.Println(fileRes.Err)
+		}
+		dirStruct.Files[fileRes.FileName] = fileRes.FileMetadata
+	}
+
+	ch <- DirStructResult{
 		DirName:   dirName,
 		DirStruct: dirStruct,
 		Err:       nil,
 	}
-	close(results)
+	close(ch)
 }
 
-func GetFileMetadataAsync(fileName string, filePath string, results chan FileMetadataResult) {
+func GetFileMetadataAsync(fileName string, filePath string, ch chan FileMetadataResult, wg *sync.WaitGroup) {
+	defer wg.Done()
 	fileMetadata := FileMetadata{}
 	digest, err := hashFileContent(filePath)
 	if err != nil {
 		fileMetadata.ContentHash = digest
 	}
-	results <- FileMetadataResult{
+	ch <- FileMetadataResult{
 		FileName:     fileName,
 		FileMetadata: fileMetadata,
 		Err:          err,
 	}
+}
 
+func closeChannelsOnWaitDone(fileCh chan FileMetadataResult, subdirCh chan DirStructResult, wg *sync.WaitGroup) {
+	wg.Wait()
+	close(fileCh)
+	close(subdirCh)
 }
 
 func MakeEmptyDirStruct() DirStruct {

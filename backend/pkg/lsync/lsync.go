@@ -2,7 +2,7 @@ package lsync
 
 import (
 	"io"
-	"lsync/backend/internal/dirmap"
+	"lsync/backend/internal/dirfetch"
 	"os"
 	"path/filepath"
 )
@@ -22,7 +22,7 @@ type SyncPreview struct {
 	Files   map[string]SyncStatus
 }
 
-func PreviewSync(src, dst dirmap.DirStruct) SyncPreview {
+func PreviewSync(src, dst dirfetch.DirStruct) SyncPreview {
 	dirSyncStruct := SyncPreview{
 		Status:  StatusNone,
 		Subdirs: make(map[string]SyncPreview),
@@ -53,7 +53,7 @@ func PreviewSync(src, dst dirmap.DirStruct) SyncPreview {
 	for subdirName, srcSubdirStruct := range src.Subdirs {
 		dstSubdirStruct, ok := dst.Subdirs[subdirName]
 		if !ok {
-			subdirSyncStruct := PreviewSync(srcSubdirStruct, dirmap.MakeEmptyDirStruct())
+			subdirSyncStruct := PreviewSync(srcSubdirStruct, dirfetch.MakeEmptyDirStruct())
 			subdirSyncStruct.Status = StatusCreated
 			dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
 			modified = true
@@ -68,7 +68,7 @@ func PreviewSync(src, dst dirmap.DirStruct) SyncPreview {
 	}
 
 	for subdirName := range dst.Subdirs {
-		subdirSyncStruct := PreviewSync(dirmap.MakeEmptyDirStruct(), dst.Subdirs[subdirName])
+		subdirSyncStruct := PreviewSync(dirfetch.MakeEmptyDirStruct(), dst.Subdirs[subdirName])
 		subdirSyncStruct.Status = StatusDeleted
 		dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
 		modified = true

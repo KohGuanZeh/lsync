@@ -1,4 +1,4 @@
-package dirmap
+package dirfetch
 
 import (
 	"log"
@@ -28,6 +28,49 @@ type FileMetadataResult struct {
 	FileName     string
 	FileMetadata FileMetadata
 	Err          error
+}
+
+type WorkRequest struct {
+	name     string
+	path     string
+	isDir    bool
+	wg       *sync.WaitGroup
+	returnCh chan DirStructResult
+}
+
+func FetchDir(dirPath string) (DirStruct, error) {
+	workerPool := make(chan WorkRequest, 50)
+	resCh := make(chan DirStructResult)
+	workerWg := new(sync.WaitGroup)
+	workerWg.Add(1)
+	workerPool <- WorkRequest{
+		name:     "",
+		path:     dirPath,
+		isDir:    false,
+		wg:       nil,
+		returnCh: resCh,
+	}
+	go worker(workerPool)
+	go closeChannelsOnFinish(workerWg, []chan WorkRequest{workerPool})
+	res := <-resCh
+	return res.DirStruct, res.Err
+}
+
+func worker(pool chan WorkRequest) {
+	for req := range pool {
+		if req.isDir {
+
+		} else {
+
+		}
+	}
+}
+
+func closeChannelsOnFinish(wg *sync.WaitGroup, chs []chan WorkRequest) {
+	wg.Wait()
+	for _, ch := range chs {
+		close(ch)
+	}
 }
 
 func GetDirStruct(dirPath string) (DirStruct, error) {

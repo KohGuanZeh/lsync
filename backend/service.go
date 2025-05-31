@@ -2,7 +2,7 @@ package backend
 
 import (
 	"log"
-	"lsync/backend/internal/dirmap"
+	"lsync/backend/internal/dirfetch"
 	"lsync/backend/pkg/lsync"
 	"time"
 
@@ -24,11 +24,11 @@ func (a *App) SelectDirectory(title string) string {
 func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
 	log.Println("Started Preview Sync")
 	start := time.Now()
-	srcDirStruct, err := dirmap.GetDirStruct(src)
+	srcDirStruct, err := dirfetch.GetDirStruct(src)
 	if err != nil {
 		return lsync.SyncPreview{}, err
 	}
-	dstDirStruct, err := dirmap.GetDirStruct(dst)
+	dstDirStruct, err := dirfetch.GetDirStruct(dst)
 	if err != nil {
 		return lsync.SyncPreview{}, err
 	}
@@ -40,9 +40,9 @@ func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
 func (a *App) PreviewSyncAsync(src, dst string) (lsync.SyncPreview, error) {
 	log.Println("Started Preview Sync Async")
 	start := time.Now()
-	srcCh, dstCh := make(chan dirmap.DirStructResult), make(chan dirmap.DirStructResult)
-	go dirmap.GetDirStructAsync(src, src, srcCh, nil)
-	go dirmap.GetDirStructAsync(dst, dst, dstCh, nil)
+	srcCh, dstCh := make(chan dirfetch.DirStructResult), make(chan dirfetch.DirStructResult)
+	go dirfetch.GetDirStructAsync(src, src, srcCh, nil)
+	go dirfetch.GetDirStructAsync(dst, dst, dstCh, nil)
 	srcRes, dstRes := <-srcCh, <-dstCh
 	if srcRes.Err != nil {
 		return lsync.SyncPreview{}, srcRes.Err

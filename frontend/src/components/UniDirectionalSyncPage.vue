@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { reactive, toRef } from 'vue'
-import { PreviewSync, PreviewSyncAsync, SyncWithPreview } from '../../wailsjs/go/backend/App'
+import { PreviewSync, SyncWithPreview } from '../../wailsjs/go/backend/App'
 import SyncPreviewTree from './SyncPreviewTree.vue';
 import { lsync } from '../../wailsjs/go/models';
 import DirectorySelect, { DirType } from './DirectorySelect.vue'
@@ -32,18 +32,6 @@ function previewSync() {
         return;
     }
     PreviewSync(syncInfo.srcDir, syncInfo.dstDir).then(res => {
-        syncInfo.dirPreview = res;
-    }, err => {
-        console.log(err);
-        syncInfo.dirPreview = undefined;
-    });
-}
-
-function previewSyncAsync() {
-    if (!syncInfo.srcDir || !syncInfo.dstDir) {
-        return;
-    }
-    PreviewSyncAsync(syncInfo.srcDir, syncInfo.dstDir).then(res => {
         syncInfo.dirPreview = res;
     }, err => {
         console.log(err);
@@ -85,7 +73,7 @@ function syncFolders() {
             </section>
             <section class="sync-controls">
                 <button class="btn" @click="previewSync">Preview</button>
-                <button class="btn" @click="previewSyncAsync">Preview Async</button>
+                <button class="btn" @click="">Sync</button>
             </section>
         </section>
         <section class="dir-sync-preview" v-if="syncInfo.dirPreview">

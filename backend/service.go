@@ -22,35 +22,11 @@ func (a *App) SelectDirectory(title string) string {
 }
 
 func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
-	log.Println("Started Preview Sync")
-	start := time.Now()
-	srcDirStruct, err := dirfetch.GetDirStruct(src)
-	if err != nil {
-		return lsync.SyncPreview{}, err
-	}
-	dstDirStruct, err := dirfetch.GetDirStruct(dst)
-	if err != nil {
-		return lsync.SyncPreview{}, err
-	}
-	syncPreview := lsync.PreviewSync(srcDirStruct, dstDirStruct)
-	log.Printf("Time taken (Seqeuntial): %v\n", time.Since(start))
-	return syncPreview, nil
-}
-
-func (a *App) PreviewSyncAsync(src, dst string) (lsync.SyncPreview, error) {
 	log.Println("Started Preview Sync Async")
 	start := time.Now()
-	srcCh, dstCh := make(chan dirfetch.DirStructResult), make(chan dirfetch.DirStructResult)
-	go dirfetch.GetDirStructAsync(src, src, srcCh, nil)
-	go dirfetch.GetDirStructAsync(dst, dst, dstCh, nil)
-	srcRes, dstRes := <-srcCh, <-dstCh
-	if srcRes.Err != nil {
-		return lsync.SyncPreview{}, srcRes.Err
-	}
-	if dstRes.Err != nil {
-		return lsync.SyncPreview{}, dstRes.Err
-	}
-	syncPreview := lsync.PreviewSync(srcRes.DirStruct, dstRes.DirStruct)
+	srcDirStruct := dirfetch.FetchDir(src)
+	dstDirStruct := dirfetch.FetchDir(dst)
+	syncPreview := lsync.PreviewSync(&srcDirStruct, &dstDirStruct)
 	log.Printf("Time taken (Async): %v\n", time.Since(start))
 	return syncPreview, nil
 }

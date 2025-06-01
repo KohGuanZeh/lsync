@@ -22,7 +22,7 @@ type SyncPreview struct {
 	Files   map[string]SyncStatus
 }
 
-func PreviewSync(src, dst dirfetch.DirStruct) SyncPreview {
+func PreviewSync(src, dst *dirfetch.DirStruct) SyncPreview {
 	dirSyncStruct := SyncPreview{
 		Status:  StatusNone,
 		Subdirs: make(map[string]SyncPreview),
@@ -53,7 +53,8 @@ func PreviewSync(src, dst dirfetch.DirStruct) SyncPreview {
 	for subdirName, srcSubdirStruct := range src.Subdirs {
 		dstSubdirStruct, ok := dst.Subdirs[subdirName]
 		if !ok {
-			subdirSyncStruct := PreviewSync(srcSubdirStruct, dirfetch.MakeEmptyDirStruct())
+			empty := dirfetch.MakeEmptyDirStruct()
+			subdirSyncStruct := PreviewSync(srcSubdirStruct, &empty)
 			subdirSyncStruct.Status = StatusCreated
 			dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
 			modified = true
@@ -68,7 +69,8 @@ func PreviewSync(src, dst dirfetch.DirStruct) SyncPreview {
 	}
 
 	for subdirName := range dst.Subdirs {
-		subdirSyncStruct := PreviewSync(dirfetch.MakeEmptyDirStruct(), dst.Subdirs[subdirName])
+		empty := dirfetch.MakeEmptyDirStruct()
+		subdirSyncStruct := PreviewSync(&empty, dst.Subdirs[subdirName])
 		subdirSyncStruct.Status = StatusDeleted
 		dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
 		modified = true

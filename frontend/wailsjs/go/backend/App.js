@@ -6,10 +6,6 @@ export function PreviewSync(arg1, arg2) {
   return window['go']['backend']['App']['PreviewSync'](arg1, arg2);
 }
 
-export function PreviewSyncAsync(arg1, arg2) {
-  return window['go']['backend']['App']['PreviewSyncAsync'](arg1, arg2);
-}
-
 export function SelectDirectory(arg1) {
   return window['go']['backend']['App']['SelectDirectory'](arg1);
 }

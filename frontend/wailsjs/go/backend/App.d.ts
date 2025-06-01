@@ -4,8 +4,6 @@ import {lsync} from '../models';
 
 export function PreviewSync(arg1:string,arg2:string):Promise<lsync.SyncPreview>;
 
-export function PreviewSyncAsync(arg1:string,arg2:string):Promise<lsync.SyncPreview>;
-
 export function SelectDirectory(arg1:string):Promise<string>;
 
 export function SyncWithPreview(arg1:string,arg2:string,arg3:lsync.SyncPreview,arg4:boolean):Promise<void>;

@@ -14,6 +14,11 @@ type DirStruct struct {
 	Subdirs map[string]DirStruct
 }
 
+type NewDirStruct struct {
+	Files   map[string]FileMetadata
+	Subdirs map[string]*NewDirStruct
+}
+
 type DirStructResult struct {
 	DirName   string
 	DirStruct DirStruct
@@ -30,46 +35,73 @@ type FileMetadataResult struct {
 	Err          error
 }
 
-type WorkRequest struct {
-	name     string
-	path     string
-	isDir    bool
-	wg       *sync.WaitGroup
-	returnCh chan DirStructResult
+type DirToProcess struct {
+	path      string
+	structPtr *NewDirStruct
 }
 
-func FetchDir(dirPath string) (DirStruct, error) {
-	workerPool := make(chan WorkRequest, 50)
-	resCh := make(chan DirStructResult)
-	workerWg := new(sync.WaitGroup)
-	workerWg.Add(1)
-	workerPool <- WorkRequest{
-		name:     "",
-		path:     dirPath,
-		isDir:    false,
-		wg:       nil,
-		returnCh: resCh,
+type FileWorkerInfo struct {
+	fileName  string
+	filePath  string
+	dirStruct *NewDirStruct
+	wg        *sync.WaitGroup
+}
+
+func FetchDir(dirPath string) NewDirStruct {
+	dirStruct := NewDirStruct{}
+	mutex := new(sync.Mutex)
+	fileWorkerPool := make(chan FileWorkerInfo, 50)
+	for range 5 {
+		go fileWorker(fileWorkerPool, mutex)
 	}
-	go worker(workerPool)
-	go closeChannelsOnFinish(workerWg, []chan WorkRequest{workerPool})
-	res := <-resCh
-	return res.DirStruct, res.Err
-}
-
-func worker(pool chan WorkRequest) {
-	for req := range pool {
-		if req.isDir {
-
-		} else {
-
+	fileWorkerWg := new(sync.WaitGroup)
+	dirsToProcess := []DirToProcess{{path: dirPath, structPtr: &dirStruct}}
+	for len(dirsToProcess) > 0 {
+		dir := dirsToProcess[0]
+		dirsToProcess = dirsToProcess[1:]
+		dirItems, err := os.ReadDir(dir.path)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		for _, dirItem := range dirItems {
+			if dirItem.IsDir() {
+				subdirName := dirItem.Name()
+				subdirPath := filepath.Join(dir.path, subdirName)
+				subdirStruct := NewDirStruct{}
+				mutex.Lock()
+				dir.structPtr.Subdirs[subdirName] = &subdirStruct
+				mutex.Unlock()
+				dirsToProcess = append(dirsToProcess, DirToProcess{path: subdirPath, structPtr: &subdirStruct})
+				continue
+			}
+			fileName := dirItem.Name()
+			fileWorkerInfo := FileWorkerInfo{
+				fileName:  fileName,
+				filePath:  filepath.Join(dir.path, fileName),
+				dirStruct: dir.structPtr,
+				wg:        fileWorkerWg,
+			}
+			fileWorkerWg.Add(1)
+			fileWorkerPool <- fileWorkerInfo
 		}
 	}
+	fileWorkerWg.Wait()
+	return dirStruct
 }
 
-func closeChannelsOnFinish(wg *sync.WaitGroup, chs []chan WorkRequest) {
-	wg.Wait()
-	for _, ch := range chs {
-		close(ch)
+func fileWorker(pool chan FileWorkerInfo, mutex *sync.Mutex) {
+	for workerInfo := range pool {
+		digest, err := hashFileContent(workerInfo.filePath)
+		if err != nil {
+			log.Println(err)
+			workerInfo.wg.Done()
+			continue
+		}
+		mutex.Lock()
+		workerInfo.dirStruct.Files[workerInfo.fileName] = FileMetadata{ContentHash: digest}
+		mutex.Unlock()
+		workerInfo.wg.Done()
 	}
 }
 

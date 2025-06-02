@@ -24,9 +24,11 @@ func (a *App) SelectDirectory(title string) string {
 func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
 	log.Println("Started Preview Sync Async")
 	start := time.Now()
-	srcDirStruct := dirfetch.FetchDir(src)
-	dstDirStruct := dirfetch.FetchDir(dst)
-	syncPreview := lsync.PreviewSync(&srcDirStruct, &dstDirStruct)
+	srcCh := dirfetch.FetchDirTreeAsync(src)
+	dstCh := dirfetch.FetchDirTreeAsync(dst)
+	srcDirTree, dstDirTree := <-srcCh, <-dstCh
+	log.Printf("Time taken for dirfetch: %v\n", time.Since(start))
+	syncPreview := lsync.PreviewSync(srcDirTree, dstDirTree)
 	log.Printf("Time taken (Async): %v\n", time.Since(start))
 	return syncPreview, nil
 }

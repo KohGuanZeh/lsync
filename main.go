@@ -29,9 +29,10 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "Lsync",
-		Width:  1024,
-		Height: 768,
+		Title:    "Lsync",
+		Width:    1024,
+		Height:   768,
+		LogLevel: 5,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

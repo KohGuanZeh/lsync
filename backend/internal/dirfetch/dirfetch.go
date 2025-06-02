@@ -9,9 +9,9 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
-type DirStruct struct {
+type DirTree struct {
 	Files   map[string]FileMetadata
-	Subdirs map[string]*DirStruct
+	Subdirs map[string]*DirTree
 }
 
 type FileMetadata struct {
@@ -19,7 +19,7 @@ type FileMetadata struct {
 }
 
 type FileTask struct {
-	parent *DirStruct
+	parent *DirTree
 	mutex  *sync.Mutex
 	name   string
 	path   string
@@ -27,23 +27,32 @@ type FileTask struct {
 }
 
 type DirQueueItem struct {
-	dirStruct *DirStruct
-	mutex     *sync.Mutex
-	path      string
+	dirTree *DirTree
+	mutex   *sync.Mutex
+	path    string
 }
 
-func FetchDir(dirPath string) DirStruct {
+func FetchDirTreeAsync(dirPath string) chan *DirTree {
+	ch := make(chan *DirTree)
+	go func() {
+		ch <- FetchDirTree(dirPath)
+		close(ch)
+	}()
+	return ch
+}
+
+func FetchDirTree(dirPath string) *DirTree {
 	fileTaskCh := make(chan FileTask, 100)
 	fileTaskWg := new(sync.WaitGroup)
 	for i := 0; i < 5; i++ {
 		go fileTaskWorker(fileTaskCh)
 	}
 
-	dirStruct := MakeEmptyDirStruct()
+	dirTree := MakeEmptyDirTree()
 	rootItem := DirQueueItem{
-		dirStruct: &dirStruct,
-		mutex:     new(sync.Mutex),
-		path:      dirPath,
+		dirTree: dirTree,
+		mutex:   new(sync.Mutex),
+		path:    dirPath,
 	}
 	dirQueue := []DirQueueItem{rootItem}
 	for len(dirQueue) > 0 {
@@ -58,21 +67,21 @@ func FetchDir(dirPath string) DirStruct {
 			name := dirItem.Name()
 			path := filepath.Join(dqi.path, name)
 			if dirItem.IsDir() {
-				subdirStruct := MakeEmptyDirStruct()
+				subdirTree := MakeEmptyDirTree()
 				nextDqi := DirQueueItem{
-					dirStruct: &subdirStruct,
-					mutex:     new(sync.Mutex),
-					path:      path,
+					dirTree: subdirTree,
+					mutex:   new(sync.Mutex),
+					path:    path,
 				}
 				dirQueue = append(dirQueue, nextDqi)
 				dqi.mutex.Lock()
-				dqi.dirStruct.Subdirs[name] = &subdirStruct
+				dqi.dirTree.Subdirs[name] = subdirTree
 				dqi.mutex.Unlock()
 				continue
 			}
 			fileTaskWg.Add(1)
 			fileTaskCh <- FileTask{
-				parent: dqi.dirStruct,
+				parent: dqi.dirTree,
 				mutex:  dqi.mutex,
 				name:   name,
 				path:   path,
@@ -81,14 +90,15 @@ func FetchDir(dirPath string) DirStruct {
 		}
 	}
 	fileTaskWg.Wait()
-	return dirStruct
+	return dirTree
 }
 
-func MakeEmptyDirStruct() DirStruct {
-	return DirStruct{
+func MakeEmptyDirTree() *DirTree {
+	emptyTree := DirTree{
 		Files:   make(map[string]FileMetadata),
-		Subdirs: make(map[string]*DirStruct),
+		Subdirs: make(map[string]*DirTree),
 	}
+	return &emptyTree
 }
 
 func fileTaskWorker(fileTaskCh <-chan FileTask) {

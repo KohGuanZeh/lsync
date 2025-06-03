@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"fmt"
 	"log"
 	"lsync/backend/internal/dirfetch"
 	"lsync/backend/pkg/lsync"
@@ -24,13 +25,17 @@ func (a *App) SelectDirectory(title string) string {
 func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
 	log.Println("Started Preview Sync Async")
 	start := time.Now()
-	srcCh := dirfetch.FetchDirTreeAsync(src)
-	dstCh := dirfetch.FetchDirTreeAsync(dst)
+	srcCh := dirfetch.FetchDirAsync(src)
+	dstCh := dirfetch.FetchDirAsync(dst)
 	srcDirTree, dstDirTree := <-srcCh, <-dstCh
+	if srcDirTree == nil {
+		return lsync.SyncPreview{}, fmt.Errorf("failed to get directory structure for src: %s", src)
+	}
+	if dstDirTree == nil {
+		return lsync.SyncPreview{}, fmt.Errorf("failed to get directory structure for dst: %s", dst)
+	}
 	log.Printf("Time taken for dirfetch: %v\n", time.Since(start))
-	syncPreview := lsync.PreviewSync(srcDirTree, dstDirTree)
-	log.Printf("Time taken (Async): %v\n", time.Since(start))
-	return syncPreview, nil
+	return lsync.SyncPreview{}, nil
 }
 
 func (a *App) SyncWithPreview(src, dst string, preview lsync.SyncPreview, ignoreDelete bool) error {

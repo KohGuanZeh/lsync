@@ -30,20 +30,20 @@ func PreviewSync(src, dst *dirfetch.DirTree) SyncPreview {
 	}
 
 	modified := false
-	for fileName, srcFileMetadata := range src.Files {
-		dirSyncStruct.Files[fileName] = StatusNone
-		dstFileMetadata, ok := dst.Files[fileName]
-		if !ok {
-			dirSyncStruct.Files[fileName] = StatusCreated
-			modified = true
-			continue
-		}
-		if dstFileMetadata.ContentHash != srcFileMetadata.ContentHash {
-			dirSyncStruct.Files[fileName] = StatusModified
-			modified = true
-		}
-		delete(dst.Files, fileName)
-	}
+	// for fileName, srcFileMetadata := range src.Files {
+	// dirSyncStruct.Files[fileName] = StatusNone
+	// dstFileMetadata, ok := dst.Files[fileName]
+	// if !ok {
+	// dirSyncStruct.Files[fileName] = StatusCreated
+	// modified = true
+	// continue
+	// }
+	// if dstFileMetadata.ContentHash != srcFileMetadata.ContentHash {
+	// dirSyncStruct.Files[fileName] = StatusModified
+	// modified = true
+	// }
+	// delete(dst.Files, fileName)
+	// }
 
 	for fileName := range dst.Files {
 		dirSyncStruct.Files[fileName] = StatusDeleted

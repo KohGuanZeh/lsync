@@ -22,7 +22,7 @@ type SyncPreview struct {
 	Files   map[string]SyncStatus
 }
 
-func PreviewSync(src, dst *dirfetch.DirTree) SyncPreview {
+func PreviewSync(src, dst dirfetch.DirTree) SyncPreview {
 	dirSyncStruct := SyncPreview{
 		Status:  StatusNone,
 		Subdirs: make(map[string]SyncPreview),

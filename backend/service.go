@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"fmt"
 	"log"
 	"lsync/backend/internal/dirfetch"
 	"lsync/backend/pkg/lsync"
@@ -27,12 +26,12 @@ func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
 	start := time.Now()
 	srcCh := dirfetch.FetchDirAsync(src)
 	dstCh := dirfetch.FetchDirAsync(dst)
-	srcDirTree, dstDirTree := <-srcCh, <-dstCh
-	if srcDirTree == nil {
-		return lsync.SyncPreview{}, fmt.Errorf("failed to get directory structure for src: %s", src)
+	srcRes, dstRes := <-srcCh, <-dstCh
+	if srcRes.Err != nil {
+		return lsync.SyncPreview{}, srcRes.Err
 	}
-	if dstDirTree == nil {
-		return lsync.SyncPreview{}, fmt.Errorf("failed to get directory structure for dst: %s", dst)
+	if dstRes.Err != nil {
+		return lsync.SyncPreview{}, dstRes.Err
 	}
 	log.Printf("Time taken for dirfetch: %v\n", time.Since(start))
 	return lsync.SyncPreview{}, nil

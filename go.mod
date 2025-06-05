@@ -4,6 +4,8 @@ go 1.24.3
 
 require github.com/wailsapp/wails/v2 v2.10.1
 
+require github.com/cespare/xxhash/v2 v2.3.0
+
 require (
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect

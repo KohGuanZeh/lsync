@@ -2,9 +2,12 @@ package lsync
 
 import (
 	"io"
+	"log"
 	"lsync/backend/internal/dirfetch"
 	"os"
 	"path/filepath"
+
+	"github.com/cespare/xxhash/v2"
 )
 
 type SyncStatus string
@@ -22,7 +25,7 @@ type SyncPreview struct {
 	Files   map[string]SyncStatus
 }
 
-func PreviewSync(src, dst dirfetch.DirTree) SyncPreview {
+func PreviewSync(src, dst dirfetch.DirTree, srcPath, dstPath string) SyncPreview {
 	dirSyncStruct := SyncPreview{
 		Status:  StatusNone,
 		Subdirs: make(map[string]SyncPreview),
@@ -30,20 +33,25 @@ func PreviewSync(src, dst dirfetch.DirTree) SyncPreview {
 	}
 
 	modified := false
-	// for fileName, srcFileMetadata := range src.Files {
-	// dirSyncStruct.Files[fileName] = StatusNone
-	// dstFileMetadata, ok := dst.Files[fileName]
-	// if !ok {
-	// dirSyncStruct.Files[fileName] = StatusCreated
-	// modified = true
-	// continue
-	// }
-	// if dstFileMetadata.ContentHash != srcFileMetadata.ContentHash {
-	// dirSyncStruct.Files[fileName] = StatusModified
-	// modified = true
-	// }
-	// delete(dst.Files, fileName)
-	// }
+	for fileName := range src.Files {
+		srcFilePath, dstFilePath := filepath.Join(srcPath, fileName), filepath.Join(dstPath, fileName)
+		dirSyncStruct.Files[fileName] = StatusNone
+		_, ok := dst.Files[fileName]
+		if !ok {
+			dirSyncStruct.Files[fileName] = StatusCreated
+			modified = true
+			continue
+		}
+		ok, err := isSameFileContent(srcFilePath, dstFilePath)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if ok {
+			continue
+		}
+		delete(dst.Files, fileName)
+	}
 
 	for fileName := range dst.Files {
 		dirSyncStruct.Files[fileName] = StatusDeleted
@@ -51,16 +59,17 @@ func PreviewSync(src, dst dirfetch.DirTree) SyncPreview {
 	}
 
 	for subdirName, srcSubdirStruct := range src.Subdirs {
+		srcSubdirPath, dstSubdirPath := filepath.Join(srcPath, subdirName), filepath.Join(dstPath, subdirName)
 		dstSubdirStruct, ok := dst.Subdirs[subdirName]
 		if !ok {
 			empty := dirfetch.MakeEmptyDirTree()
-			subdirSyncStruct := PreviewSync(srcSubdirStruct, empty)
+			subdirSyncStruct := PreviewSync(srcSubdirStruct, empty, srcSubdirPath, dstSubdirPath)
 			subdirSyncStruct.Status = StatusCreated
 			dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
 			modified = true
 			continue
 		}
-		subdirSyncStruct := PreviewSync(srcSubdirStruct, dstSubdirStruct)
+		subdirSyncStruct := PreviewSync(srcSubdirStruct, dstSubdirStruct, srcSubdirPath, dstSubdirPath)
 		dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
 		if !modified && subdirSyncStruct.Status != StatusNone {
 			modified = true
@@ -69,8 +78,9 @@ func PreviewSync(src, dst dirfetch.DirTree) SyncPreview {
 	}
 
 	for subdirName := range dst.Subdirs {
+		srcSubdirPath, dstSubdirPath := filepath.Join(srcPath, subdirName), filepath.Join(dstPath, subdirName)
 		empty := dirfetch.MakeEmptyDirTree()
-		subdirSyncStruct := PreviewSync(empty, dst.Subdirs[subdirName])
+		subdirSyncStruct := PreviewSync(empty, dst.Subdirs[subdirName], srcSubdirPath, dstSubdirPath)
 		subdirSyncStruct.Status = StatusDeleted
 		dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
 		modified = true
@@ -139,6 +149,33 @@ func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) er
 	}
 
 	return nil
+}
+
+func isSameFileContent(src, dst string) (bool, error) {
+	srcFileInfo, err := os.Stat(src)
+	if err != nil {
+		return false, err
+	}
+	dstFileInfo, err := os.Stat(dst)
+	if err != nil {
+		return false, err
+	}
+
+	if srcFileInfo.Size() != dstFileInfo.Size() {
+		return false, nil
+	}
+
+	srcFile, err := os.ReadFile(src)
+	if err != nil {
+		return false, err
+	}
+	dstFile, err := os.ReadFile(dst)
+	if err != nil {
+		return false, err
+	}
+
+	srcDigest, dstDigest := xxhash.Sum64(srcFile), xxhash.Sum64(dstFile)
+	return srcDigest == dstDigest, nil
 }
 
 func copyFile(src, dst string) error {

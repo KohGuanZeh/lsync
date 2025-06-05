@@ -34,7 +34,10 @@ func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
 		return lsync.SyncPreview{}, dstRes.Err
 	}
 	log.Printf("Time taken for dirfetch: %v\n", time.Since(start))
-	return lsync.SyncPreview{}, nil
+	start = time.Now()
+	preview := lsync.PreviewSync(srcRes.DirTree, dstRes.DirTree, src, dst)
+	log.Printf("Time taken for preview: %v\n", time.Since(start))
+	return preview, nil
 }
 
 func (a *App) SyncWithPreview(src, dst string, preview lsync.SyncPreview, ignoreDelete bool) error {

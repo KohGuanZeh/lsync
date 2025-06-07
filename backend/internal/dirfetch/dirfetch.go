@@ -1,86 +1,62 @@
 package dirfetch
 
 import (
-	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
-	"strings"
 )
 
-type FetchDirResult struct {
-	DirTree DirTree
+type DirFetchResult struct {
 	Err     error
+	ItemMap DirItemMap
 }
 
-type DirTree struct {
-	Subdirs map[string]DirTree
-	Files   map[string]struct{}
+type DirItemMap struct {
+	BasePath string
+	RelPaths map[string]map[string]struct{}
 }
 
-func FetchDirAsync(dirpath string) chan FetchDirResult {
-	ch := make(chan FetchDirResult)
+func FetchDirAsync(path string) chan DirFetchResult {
+	ch := make(chan DirFetchResult)
 	go func() {
-		ch <- FetchDir(dirpath)
+		ch <- FetchDir(path)
 	}()
 	return ch
 }
 
-func FetchDir(dirpath string) FetchDirResult {
-	tree := MakeEmptyDirTree()
-	err := filepath.WalkDir(dirpath, walkDirFunc(dirpath, &tree))
-	if err != nil {
-		return FetchDirResult{
-			DirTree: DirTree{},
-			Err:     err,
-		}
+func FetchDir(path string) DirFetchResult {
+	itemMap := DirItemMap{
+		BasePath: path,
+		RelPaths: make(map[string]map[string]struct{}),
 	}
-	return FetchDirResult{
-		DirTree: tree,
-		Err:     nil,
+	err := filepath.WalkDir(path, walkDirFunc(path, &itemMap))
+	return DirFetchResult{
+		Err:     err,
+		ItemMap: itemMap,
 	}
 }
 
-func walkDirFunc(rootPath string, rootTree *DirTree) fs.WalkDirFunc {
-	pathSep := string(os.PathSeparator)
+func walkDirFunc(root string, fetchResult *DirItemMap) fs.WalkDirFunc {
 	return func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if path == rootPath {
+		if path == root {
 			// Root tree has already been created
 			return nil
 		}
 
-		relPath, err := filepath.Rel(rootPath, path)
+		relPath, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
-		parts := strings.Split(relPath, pathSep)
-
-		tree := *rootTree
-		for i := 0; i < len(parts)-1; i++ {
-			subtree, ok := tree.Subdirs[parts[i]]
-			if !ok {
-				return fmt.Errorf("cannot find parent DirTree for path: %s", path)
-			}
-			tree = subtree
-		}
-
-		name := parts[len(parts)-1]
 		if d.IsDir() {
-			tree.Subdirs[name] = MakeEmptyDirTree()
-		} else {
-			tree.Files[name] = struct{}{}
+			fetchResult.RelPaths[relPath] = make(map[string]struct{})
+			return nil
 		}
+		dirPath := filepath.Dir(relPath)
+		fileName := d.Name()
+		fetchResult.RelPaths[dirPath][fileName] = struct{}{}
 		return nil
-	}
-}
-
-func MakeEmptyDirTree() DirTree {
-	return DirTree{
-		Subdirs: make(map[string]DirTree),
-		Files:   make(map[string]struct{}),
 	}
 }

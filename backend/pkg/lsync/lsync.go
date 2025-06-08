@@ -24,73 +24,55 @@ type SyncPreview struct {
 	Files   map[string]SyncStatus
 }
 
+type SubDirTask struct {
+	srcBasePath    string
+	dstBasePath    string
+	relPath        string
+	srcSubdirItems map[string]struct{}
+	dstSubdirItems map[string]struct{}
+}
+
 func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
-	dirSyncStruct := SyncPreview{
-		Status:  StatusNone,
-		Subdirs: make(map[string]SyncPreview),
-		Files:   make(map[string]SyncStatus),
+	subdirTaskCh := make(chan SubDirTask)
+	for i := 0; i < 10; i++ {
+		go subdirCmpWorker(subdirTaskCh)
 	}
 
-	return dirSyncStruct
+	for relPath, srcSubdirItem := range src.RelPaths {
+		dstSubdirItem, ok := dst.RelPaths[relPath]
+		if ok {
+			subdirTask := SubDirTask{
+				srcBasePath:    src.BasePath,
+				dstBasePath:    dst.BasePath,
+				relPath:        relPath,
+				srcSubdirItems: srcSubdirItem,
+				dstSubdirItems: dstSubdirItem,
+			}
+			subdirTaskCh <- subdirTask
+		} else {
+			// Add new entry to result...
+		}
+		delete(dst.RelPaths, relPath)
+	}
 
-	// modified := false
-	// for fileName := range src.Files {
-	// 	srcFilePath, dstFilePath := filepath.Join(srcPath, fileName), filepath.Join(dstPath, fileName)
-	// 	dirSyncStruct.Files[fileName] = StatusNone
-	// 	_, ok := dst.Files[fileName]
-	// 	if !ok {
-	// 		dirSyncStruct.Files[fileName] = StatusCreated
-	// 		modified = true
-	// 		continue
-	// 	}
-	// 	ok, err := isSameFileContent(srcFilePath, dstFilePath)
-	// 	if err != nil {
-	// 		log.Println(err)
-	// 		continue
-	// 	}
-	// 	if ok {
-	// 		continue
-	// 	}
-	// 	delete(dst.Files, fileName)
-	// }
+	for relPath, dstSubdirItem := range dst.RelPaths {
+		// Look at the remaining keys...
+		// These are keys missing from source...
+	}
 
-	// for fileName := range dst.Files {
-	// 	dirSyncStruct.Files[fileName] = StatusDeleted
-	// 	modified = true
-	// }
+	// Collect results in a map (same as prev)
+	// Collapse results into a tree
+	return SyncPreview{}
+}
 
-	// for subdirName, srcSubdirStruct := range src.Subdirs {
-	// 	srcSubdirPath, dstSubdirPath := filepath.Join(srcPath, subdirName), filepath.Join(dstPath, subdirName)
-	// 	dstSubdirStruct, ok := dst.Subdirs[subdirName]
-	// 	if !ok {
-	// 		empty := dirfetch.MakeEmptyDirTree()
-	// 		subdirSyncStruct := PreviewSync(srcSubdirStruct, empty, srcSubdirPath, dstSubdirPath)
-	// 		subdirSyncStruct.Status = StatusCreated
-	// 		dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
-	// 		modified = true
-	// 		continue
-	// 	}
-	// 	subdirSyncStruct := PreviewSync(srcSubdirStruct, dstSubdirStruct, srcSubdirPath, dstSubdirPath)
-	// 	dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
-	// 	if !modified && subdirSyncStruct.Status != StatusNone {
-	// 		modified = true
-	// 	}
-	// 	delete(dst.Subdirs, subdirName)
-	// }
-
-	// for subdirName := range dst.Subdirs {
-	// 	srcSubdirPath, dstSubdirPath := filepath.Join(srcPath, subdirName), filepath.Join(dstPath, subdirName)
-	// 	empty := dirfetch.MakeEmptyDirTree()
-	// 	subdirSyncStruct := PreviewSync(empty, dst.Subdirs[subdirName], srcSubdirPath, dstSubdirPath)
-	// 	subdirSyncStruct.Status = StatusDeleted
-	// 	dirSyncStruct.Subdirs[subdirName] = subdirSyncStruct
-	// 	modified = true
-	// }
-
-	// if modified {
-	// 	dirSyncStruct.Status = StatusModified
-	// }
-	// return dirSyncStruct
+func subdirCmpWorker(subdirTaskCh chan SubDirTask) {
+	for subdirTask := range subdirTaskCh {
+		// subdir comparator
+		// Create a worker for comparing files?
+		// We can do it sequentially until we feel it is same.
+		// Create a channel to get the result, and a waitgroup...
+		// So also need a filecmp channel that is passed... so we can channel to it.
+	}
 }
 
 func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) error {

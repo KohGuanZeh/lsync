@@ -32,11 +32,17 @@ type SubDirTask struct {
 	dstSubdirItems map[string]struct{}
 }
 
+type SubDirTaskResult struct {
+	relPath        string
+	fileSyncStatus map[string]SyncStatus
+}
+
 func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
-	subdirTaskCh := make(chan SubDirTask)
+	subdirTaskCh := make(chan SubDirTask, 100)
 	for i := 0; i < 10; i++ {
 		go subdirCmpWorker(subdirTaskCh)
 	}
+	subdirResults := make([]SubDirTaskResult, 0, len(src.RelPaths)+len(dst.RelPaths))
 
 	for relPath, srcSubdirItem := range src.RelPaths {
 		dstSubdirItem, ok := dst.RelPaths[relPath]
@@ -50,14 +56,28 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 			}
 			subdirTaskCh <- subdirTask
 		} else {
-			// Add new entry to result...
+			resMap := make(map[string]SyncStatus, len(srcSubdirItem))
+			for file := range srcSubdirItem {
+				resMap[file] = StatusCreated
+			}
+			subdirResults = append(subdirResults, SubDirTaskResult{
+				relPath:        relPath,
+				fileSyncStatus: resMap,
+			})
 		}
 		delete(dst.RelPaths, relPath)
 	}
 
 	for relPath, dstSubdirItem := range dst.RelPaths {
-		// Look at the remaining keys...
-		// These are keys missing from source...
+		// Should ignore delete be here?
+		resMap := make(map[string]SyncStatus, len(dstSubdirItem))
+		for file := range dstSubdirItem {
+			resMap[file] = StatusDeleted
+		}
+		subdirResults = append(subdirResults, SubDirTaskResult{
+			relPath:        relPath,
+			fileSyncStatus: resMap,
+		})
 	}
 
 	// Collect results in a map (same as prev)

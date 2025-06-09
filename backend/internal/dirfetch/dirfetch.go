@@ -41,11 +41,6 @@ func walkDirFunc(root string, fetchResult *DirItemMap) fs.WalkDirFunc {
 			return err
 		}
 
-		if path == root {
-			// Root tree has already been created
-			return nil
-		}
-
 		relPath, err := filepath.Rel(root, path)
 		if err != nil {
 			return err

@@ -2,9 +2,11 @@ package lsync
 
 import (
 	"io"
+	"log"
 	"lsync/backend/internal/dirfetch"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/cespare/xxhash/v2"
 )
@@ -24,7 +26,7 @@ type SyncPreview struct {
 	Files   map[string]SyncStatus
 }
 
-type SubDirTask struct {
+type SubdirTask struct {
 	srcBasePath    string
 	dstBasePath    string
 	relPath        string
@@ -33,66 +35,84 @@ type SubDirTask struct {
 }
 
 type SubDirTaskResult struct {
-	relPath        string
-	fileSyncStatus map[string]SyncStatus
+	relPath string
+	files   map[string]SyncStatus
 }
 
 func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
-	subdirTaskCh := make(chan SubDirTask, 100)
-	for i := 0; i < 10; i++ {
-		go subdirCmpWorker(subdirTaskCh)
+	wg := new(sync.WaitGroup)
+	taskCh := make(chan SubdirTask, 100)
+	resCh := make(chan SubDirTaskResult, 100)
+	for range 10 {
+		go subdirWorker(taskCh, resCh, wg)
 	}
-	subdirResults := make([]SubDirTaskResult, 0, len(src.RelPaths)+len(dst.RelPaths))
-
-	for relPath, srcSubdirItem := range src.RelPaths {
-		dstSubdirItem, ok := dst.RelPaths[relPath]
-		if ok {
-			subdirTask := SubDirTask{
-				srcBasePath:    src.BasePath,
-				dstBasePath:    dst.BasePath,
-				relPath:        relPath,
-				srcSubdirItems: srcSubdirItem,
-				dstSubdirItems: dstSubdirItem,
-			}
-			subdirTaskCh <- subdirTask
-		} else {
-			resMap := make(map[string]SyncStatus, len(srcSubdirItem))
-			for file := range srcSubdirItem {
-				resMap[file] = StatusCreated
-			}
-			subdirResults = append(subdirResults, SubDirTaskResult{
-				relPath:        relPath,
-				fileSyncStatus: resMap,
-			})
-		}
-		delete(dst.RelPaths, relPath)
+	wg.Add(1)
+	go iterDirItemMap(src, dst, taskCh, wg)
+	go closeChannelOnWaitDone(resCh, wg)
+	results := make([]SubDirTaskResult, 0, len(src.RelPaths)+len(dst.RelPaths))
+	for result := range resCh {
+		results = append(results, result)
 	}
-
-	for relPath, dstSubdirItem := range dst.RelPaths {
-		// Should ignore delete be here?
-		resMap := make(map[string]SyncStatus, len(dstSubdirItem))
-		for file := range dstSubdirItem {
-			resMap[file] = StatusDeleted
-		}
-		subdirResults = append(subdirResults, SubDirTaskResult{
-			relPath:        relPath,
-			fileSyncStatus: resMap,
-		})
-	}
-
+	log.Println(results)
 	// Collect results in a map (same as prev)
 	// Collapse results into a tree
 	return SyncPreview{}
 }
 
-func subdirCmpWorker(subdirTaskCh chan SubDirTask) {
-	for subdirTask := range subdirTaskCh {
-		// subdir comparator
-		// Create a worker for comparing files?
-		// We can do it sequentially until we feel it is same.
-		// Create a channel to get the result, and a waitgroup...
-		// So also need a filecmp channel that is passed... so we can channel to it.
+func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.WaitGroup) {
+	defer wg.Done()
+	workerTask := SubdirTask{
+		srcBasePath: src.BasePath,
+		dstBasePath: dst.BasePath,
 	}
+	for relPath, srcSubdirItems := range src.RelPaths {
+		dstSubdirItems, ok := dst.RelPaths[relPath]
+		if !ok {
+			dstSubdirItems = nil
+		}
+		workerTask.relPath = relPath
+		workerTask.srcSubdirItems = srcSubdirItems
+		workerTask.dstSubdirItems = dstSubdirItems
+		wg.Add(1)
+		ch <- workerTask
+		delete(dst.RelPaths, relPath)
+	}
+
+	workerTask.srcSubdirItems = nil
+	for relPath, dstSubdirItems := range dst.RelPaths {
+		workerTask.relPath = relPath
+		workerTask.dstSubdirItems = dstSubdirItems
+		wg.Add(1)
+		ch <- workerTask
+	}
+}
+
+func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.WaitGroup) {
+	for task := range taskCh {
+		taskRes := SubDirTaskResult{relPath: task.relPath}
+		if task.srcSubdirItems == nil {
+			// Subdir does not exist in source
+			taskRes.files = make(map[string]SyncStatus, len(task.dstSubdirItems))
+			for fileName := range task.dstSubdirItems {
+				taskRes.files[fileName] = StatusDeleted
+			}
+		} else if task.dstSubdirItems == nil {
+			// Subdir does not exist in destination
+			taskRes.files = make(map[string]SyncStatus, len(task.srcSubdirItems))
+			for fileName := range task.srcSubdirItems {
+				taskRes.files[fileName] = StatusCreated
+			}
+		} else {
+			// Do file comparison here
+		}
+		resCh <- taskRes
+		wg.Done()
+	}
+}
+
+func closeChannelOnWaitDone[T any](ch chan T, wg *sync.WaitGroup) {
+	wg.Wait()
+	close(ch)
 }
 
 func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) error {

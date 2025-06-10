@@ -54,6 +54,8 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 		results = append(results, result)
 	}
 	log.Println(results)
+	// Close task channel for goroutines to exit.
+	close(taskCh)
 	// Collect results in a map (same as prev)
 	// Collapse results into a tree
 	return SyncPreview{}
@@ -89,7 +91,7 @@ func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.W
 
 func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.WaitGroup) {
 	for task := range taskCh {
-		taskRes := SubDirTaskResult{relPath: task.relPath}
+		taskRes := SubDirTaskResult{relPath: task.relPath, files: make(map[string]SyncStatus)}
 		if task.srcSubdirItems == nil {
 			// Subdir does not exist in source
 			taskRes.files = make(map[string]SyncStatus, len(task.dstSubdirItems))
@@ -103,7 +105,34 @@ func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.
 				taskRes.files[fileName] = StatusCreated
 			}
 		} else {
-			// Do file comparison here
+			for fileName := range task.srcSubdirItems {
+				_, ok := task.dstSubdirItems[fileName]
+				if ok {
+					// File comparison here
+					srcFilePath := filepath.Join(task.srcBasePath, task.relPath, fileName)
+					dstFilePath := filepath.Join(task.dstBasePath, task.relPath, fileName)
+					// Perhaps introduce concurrency for file comparision
+					// Can also look into improving speed for comparision via mmap etc.
+					ok, err := isSameFileContent(srcFilePath, dstFilePath)
+					if err != nil {
+						log.Println(err)
+						// Do not modify file content if there is an error.
+						ok = true
+					}
+					if ok {
+						taskRes.files[fileName] = StatusNone
+					} else {
+						taskRes.files[fileName] = StatusModified
+					}
+				} else {
+					taskRes.files[fileName] = StatusCreated
+				}
+				delete(task.dstSubdirItems, fileName)
+			}
+
+			for fileName := range task.dstSubdirItems {
+				taskRes.files[fileName] = StatusDeleted
+			}
 		}
 		resCh <- taskRes
 		wg.Done()

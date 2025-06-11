@@ -6,6 +6,7 @@ import (
 	"lsync/backend/internal/dirfetch"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cespare/xxhash/v2"
@@ -49,16 +50,43 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 	wg.Add(1)
 	go iterDirItemMap(src, dst, taskCh, wg)
 	go closeChannelOnWaitDone(resCh, wg)
-	results := make([]SubDirTaskResult, 0, len(src.RelPaths)+len(dst.RelPaths))
-	for result := range resCh {
-		results = append(results, result)
+	syncPreview := SyncPreview{
+		Status:  StatusNone,
+		Subdirs: make(map[string]SyncPreview),
 	}
-	log.Println(results)
+	pathSep := string(os.PathSeparator)
+	for result := range resCh {
+		// Root directory
+		if result.relPath == "." {
+			syncPreview.Files = result.files
+			continue
+		}
+		parentMap := syncPreview.Subdirs
+		subdirs := strings.Split(result.relPath, pathSep)
+		for i := 0; i < len(subdirs); i++ {
+			subdir := subdirs[i]
+			_, ok := parentMap[subdir]
+			if !ok {
+				parentMap[subdir] = SyncPreview{
+					Status:  StatusNone,
+					Subdirs: make(map[string]SyncPreview),
+				}
+			}
+			if i == len(subdirs)-1 {
+				// Not sure if there is a better way to resolve this...
+				// Can use pointers but eventually need to dereference to pass back to front end.
+				targetSyncPreview := parentMap[subdir]
+				targetSyncPreview.Files = result.files
+				parentMap[subdir] = targetSyncPreview
+			} else {
+				parentMap = parentMap[subdir].Subdirs
+			}
+		}
+		// Find a way to resolve sync status
+	}
 	// Close task channel for goroutines to exit.
 	close(taskCh)
-	// Collect results in a map (same as prev)
-	// Collapse results into a tree
-	return SyncPreview{}
+	return syncPreview
 }
 
 func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.WaitGroup) {

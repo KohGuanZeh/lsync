@@ -23,7 +23,7 @@ const (
 
 type SyncPreview struct {
 	Status  SyncStatus
-	Subdirs map[string]SyncPreview
+	Subdirs map[string]*SyncPreview
 	Files   map[string]SyncStatus
 }
 
@@ -52,34 +52,32 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 	go closeChannelOnWaitDone(resCh, wg)
 	syncPreview := SyncPreview{
 		Status:  StatusNone,
-		Subdirs: make(map[string]SyncPreview),
+		Subdirs: make(map[string]*SyncPreview),
 	}
 	pathSep := string(os.PathSeparator)
 	for result := range resCh {
+		parent := &syncPreview
 		// Root directory
 		if result.relPath == "." {
-			syncPreview.Files = result.files
+			parent.Files = result.files
 			continue
 		}
-		parentMap := syncPreview.Subdirs
 		subdirs := strings.Split(result.relPath, pathSep)
 		for i := 0; i < len(subdirs); i++ {
 			subdir := subdirs[i]
-			_, ok := parentMap[subdir]
+			_, ok := parent.Subdirs[subdir]
 			if !ok {
-				parentMap[subdir] = SyncPreview{
+				subdirPreview := SyncPreview{
 					Status:  StatusNone,
-					Subdirs: make(map[string]SyncPreview),
+					Subdirs: make(map[string]*SyncPreview),
 				}
+				parent.Subdirs[subdir] = &subdirPreview
 			}
 			if i == len(subdirs)-1 {
-				// Not sure if there is a better way to resolve this...
-				// Can use pointers but eventually need to dereference to pass back to front end.
-				targetSyncPreview := parentMap[subdir]
-				targetSyncPreview.Files = result.files
-				parentMap[subdir] = targetSyncPreview
+				targetSubdir := parent.Subdirs[subdir]
+				targetSubdir.Files = result.files
 			} else {
-				parentMap = parentMap[subdir].Subdirs
+				parent = parent.Subdirs[subdir]
 			}
 		}
 		// Find a way to resolve sync status

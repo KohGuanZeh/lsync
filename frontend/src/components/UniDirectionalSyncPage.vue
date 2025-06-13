@@ -73,7 +73,7 @@ function syncFolders() {
             </section>
             <section class="sync-controls">
                 <button class="btn" @click="previewSync">Preview</button>
-                <button class="btn" @click="">Sync</button>
+                <button class="btn" @click="syncFolders">Sync</button>
             </section>
         </section>
         <section class="dir-sync-preview" v-if="syncInfo.dirPreview">

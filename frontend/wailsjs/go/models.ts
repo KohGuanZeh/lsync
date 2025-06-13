@@ -8,8 +8,9 @@ export namespace lsync {
 	}
 	export class SyncPreview {
 	    Status: SyncStatus;
+	    BitStatus: number;
 	    Subdirs: Record<string, SyncPreview>;
-	    Files: Record<string, string>;
+	    Files: Record<string, number>;
 	
 	    static createFrom(source: any = {}) {
 	        return new SyncPreview(source);
@@ -18,6 +19,7 @@ export namespace lsync {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.Status = source["Status"];
+	        this.BitStatus = source["BitStatus"];
 	        this.Subdirs = this.convertValues(source["Subdirs"], SyncPreview, true);
 	        this.Files = source["Files"];
 	    }

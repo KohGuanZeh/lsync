@@ -42,5 +42,6 @@ func (a *App) PreviewSync(src, dst string) (lsync.SyncPreview, error) {
 }
 
 func (a *App) SyncWithPreview(src, dst string, preview lsync.SyncPreview, ignoreDelete bool) error {
+	log.Println("Synced...")
 	return lsync.SyncWithPreview(src, dst, preview, ignoreDelete)
 }

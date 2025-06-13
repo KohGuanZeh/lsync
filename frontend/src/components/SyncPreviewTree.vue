@@ -32,7 +32,7 @@ const subdirs = computed(() => Object.entries(props.dirPreview.Subdirs).map(kv =
 const files = computed(() => Object.entries(props.dirPreview.Files).map(kv => {
     return {
         name: kv[0],
-        class: getClassFromBitStatus(kv[1]),
+        class: getClassFromSyncStatus(kv[1]),
         key: pathJoin(props.dirPath, kv[0])
     };
 }));
@@ -52,25 +52,6 @@ function getClassFromSyncStatus(status: string): string {
     return ""
 }
 
-function getClassFromBitStatus(bitStatus: number): string {
-    switch (bitStatus) {
-        case 0b000:
-            return "";
-        case 0b001:
-            return "deleted";
-        case 0b010:
-            return "created";
-        default:
-            if ((bitStatus >> 3) > 0) {
-                // If bitStatus is 0b1XXX, ignore.
-                // This has yet to be completely implemented.
-                // Remove if this does not follow through.
-                return "ignored";
-            }
-            return "modified";
-    }
-}
-
 function pathJoin(path: string, name: string): string {
     return `${path}\\${name}`;
 }
@@ -81,7 +62,7 @@ function pathJoin(path: string, name: string): string {
     <ul>
         <li>
             <details open>
-                <summary :class="getClassFromBitStatus(dirPreview.BitStatus)">{{ dirName }}</summary>
+                <summary :class="getClassFromSyncStatus(dirPreview.Status)">{{ dirName }}</summary>
                 <div class="list-children">
                     <SyncPreviewTree v-for="v in subdirs" :key="v.path" :dir-path="v.path" :dir-name="v.name"
                         :dir-preview="v.preview" :ignore-deleted="props.ignoreDeleted">

@@ -39,11 +39,11 @@ function previewSync() {
     });
 }
 
-function syncFolders() {
+async function syncFolders() {
     if (!syncInfo.dirPreview) {
         return;
     }
-    SyncWithPreview(syncInfo.srcDir, syncInfo.dstDir, syncInfo.dirPreview, syncInfo.ignoreMissingInSrc).then(res => {
+    await SyncWithPreview(syncInfo.srcDir, syncInfo.dstDir, syncInfo.dirPreview, syncInfo.ignoreMissingInSrc).then(res => {
         console.log("Success");
     }, err => {
         console.log(err);

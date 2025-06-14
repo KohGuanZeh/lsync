@@ -16,7 +16,7 @@ const syncInfo: SyncInfo = reactive({
     srcDir: "",
     dstDir: "",
     dirPreview: undefined,
-    ignoreMissingInSrc: false
+    ignoreMissingInSrc: true
 });
 
 function updateDirVal(dirType: DirType, newDirVal: string) {

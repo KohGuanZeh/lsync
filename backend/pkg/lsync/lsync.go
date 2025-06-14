@@ -57,45 +57,97 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 	}
 	pathSep := string(os.PathSeparator)
 	for result := range resCh {
-		parent := &syncPreview
-		// Root directory
-		if result.relPath == "." {
-			parent.Files = result.files
-			continue
-		}
+		targetPreview := &syncPreview
 		subdirs := strings.Split(result.relPath, pathSep)
+		if result.relPath == "." {
+			// Root directory
+			subdirs = nil
+		}
 		for i := 0; i < len(subdirs); i++ {
+			// Alter parent status according to results
+			if targetPreview.Status != result.status {
+				targetPreview.Status = StatusModified
+			}
 			subdir := subdirs[i]
-			_, ok := parent.Subdirs[subdir]
+			subdirPreview, ok := targetPreview.Subdirs[subdir]
 			if !ok {
-				subdirPreview := SyncPreview{
-					Status:  StatusNone,
+				subdirPreview = &SyncPreview{
+					Status:  result.status,
 					Subdirs: make(map[string]*SyncPreview),
 				}
-				parent.Subdirs[subdir] = &subdirPreview
+				targetPreview.Subdirs[subdir] = subdirPreview
 			}
-			if i == len(subdirs)-1 {
-				targetSubdir := parent.Subdirs[subdir]
-				targetSubdir.Files = result.files
-				if targetSubdir.Status != result.status {
-					if len(targetSubdir.Subdirs) == 0 {
-						targetSubdir.Status = result.status
-					} else if targetSubdir.Status != result.status {
-						targetSubdir.Status = StatusModified
-					}
-				}
-			} else {
-				parent = parent.Subdirs[subdir]
-				if parent.Status != result.status {
-					parent.Status = StatusModified
-				}
-			}
+			targetPreview = subdirPreview
 		}
-		// Find a way to resolve sync status
+		if len(targetPreview.Subdirs) == 0 {
+			targetPreview.Status = result.status
+		} else if targetPreview.Status != result.status {
+			targetPreview.Status = StatusModified
+		}
+		targetPreview.Files = result.files
 	}
 	// Close task channel for goroutines to exit.
 	close(taskCh)
 	return syncPreview
+}
+
+func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) error {
+	switch preview.Status {
+	case StatusCreated:
+		err := os.Mkdir(dst, 0755)
+		if err != nil {
+			return err
+		}
+		for file := range preview.Files {
+			srcPath := filepath.Join(src, file)
+			dstPath := filepath.Join(dst, file)
+			err := copyFile(srcPath, dstPath)
+			if err != nil {
+				return err
+			}
+		}
+	case StatusModified:
+		for file, fileStatus := range preview.Files {
+			dstPath := filepath.Join(dst, file)
+			switch fileStatus {
+			case StatusCreated, StatusModified:
+				srcPath := filepath.Join(src, file)
+				err := copyFile(srcPath, dstPath)
+				if err != nil {
+					return err
+				}
+			case StatusDeleted:
+				if ignoreDelete {
+					break
+				}
+				err := os.Remove(dstPath)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	case StatusDeleted:
+		if ignoreDelete {
+			break
+		}
+		err := os.RemoveAll(dst)
+		if err != nil {
+			return err
+		}
+	}
+
+	if preview.Status == StatusCreated || preview.Status == StatusModified {
+		for subdir, subdirPreview := range preview.Subdirs {
+			srcPath := filepath.Join(src, subdir)
+			dstPath := filepath.Join(dst, subdir)
+			err := SyncWithPreview(srcPath, dstPath, *subdirPreview, ignoreDelete)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.WaitGroup) {
@@ -184,65 +236,6 @@ func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.
 func closeChannelOnWaitDone[T any](ch chan T, wg *sync.WaitGroup) {
 	wg.Wait()
 	close(ch)
-}
-
-func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) error {
-	switch preview.Status {
-	case StatusCreated:
-		err := os.Mkdir(dst, 0755)
-		if err != nil {
-			return err
-		}
-		for file := range preview.Files {
-			srcPath := filepath.Join(src, file)
-			dstPath := filepath.Join(dst, file)
-			err := copyFile(srcPath, dstPath)
-			if err != nil {
-				return err
-			}
-		}
-	case StatusModified:
-		for file, fileStatus := range preview.Files {
-			dstPath := filepath.Join(dst, file)
-			switch fileStatus {
-			case StatusCreated, StatusModified:
-				srcPath := filepath.Join(src, file)
-				err := copyFile(srcPath, dstPath)
-				if err != nil {
-					return err
-				}
-			case StatusDeleted:
-				if ignoreDelete {
-					break
-				}
-				err := os.Remove(dstPath)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	case StatusDeleted:
-		if ignoreDelete {
-			break
-		}
-		err := os.RemoveAll(dst)
-		if err != nil {
-			return err
-		}
-	}
-
-	if preview.Status == StatusCreated || preview.Status == StatusModified {
-		for subdir, subdirPreview := range preview.Subdirs {
-			srcPath := filepath.Join(src, subdir)
-			dstPath := filepath.Join(dst, subdir)
-			err := SyncWithPreview(srcPath, dstPath, *subdirPreview, ignoreDelete)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 func isSameFileContent(src, dst string) (bool, error) {

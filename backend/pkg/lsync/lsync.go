@@ -199,23 +199,25 @@ func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.
 			for fileName := range task.srcSubdirItems {
 				_, ok := task.dstSubdirItems[fileName]
 				if ok {
-					// File comparison here
+					taskRes.files[fileName] = StatusNone
 					srcFilePath := filepath.Join(task.srcBasePath, task.relPath, fileName)
 					dstFilePath := filepath.Join(task.dstBasePath, task.relPath, fileName)
-					// Perhaps introduce concurrency for file comparision
-					// Can also look into improving speed for comparision via mmap etc.
-					ok, err := isSameFileContent(srcFilePath, dstFilePath)
+					isSameSize, err := isSameFileSize(srcFilePath, dstFilePath)
 					if err != nil {
 						log.Println(err)
-						// Do not modify file content if there is an error.
-						ok = true
+						continue
 					}
-					if ok {
-						taskRes.files[fileName] = StatusNone
-					} else {
-						taskRes.files[fileName] = StatusModified
-						taskRes.status = StatusModified
+					if isSameSize {
+						isSameFile, err := isSameFileContent(srcFilePath, dstFilePath)
+						if err != nil {
+							log.Println(err)
+							continue
+						} else if isSameFile {
+							continue
+						}
 					}
+					taskRes.files[fileName] = StatusModified
+					taskRes.status = StatusModified
 				} else {
 					taskRes.files[fileName] = StatusCreated
 					taskRes.status = StatusModified
@@ -238,20 +240,21 @@ func closeChannelOnWaitDone[T any](ch chan T, wg *sync.WaitGroup) {
 	close(ch)
 }
 
-func isSameFileContent(src, dst string) (bool, error) {
+func isSameFileSize(src, dst string) (bool, error) {
 	srcFileInfo, err := os.Stat(src)
 	if err != nil {
 		return false, err
 	}
+
 	dstFileInfo, err := os.Stat(dst)
 	if err != nil {
 		return false, err
 	}
 
-	if srcFileInfo.Size() != dstFileInfo.Size() {
-		return false, nil
-	}
+	return srcFileInfo.Size() == dstFileInfo.Size(), nil
+}
 
+func isSameFileContent(src, dst string) (bool, error) {
 	srcFile, err := os.ReadFile(src)
 	if err != nil {
 		return false, err

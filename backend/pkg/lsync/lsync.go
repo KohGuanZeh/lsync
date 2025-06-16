@@ -41,15 +41,32 @@ type SubDirTaskResult struct {
 	files   map[string]SyncStatus
 }
 
+type FileCmpTask struct {
+	fileName    string
+	srcFilePath string
+	dstFilePath string
+	cmpResCh    chan FileCmpTaskResult
+	wg          *sync.WaitGroup
+}
+
+type FileCmpTaskResult struct {
+	fileName   string
+	isSameFile bool
+}
+
 func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 	wg := new(sync.WaitGroup)
-	taskCh := make(chan SubdirTask, 100)
+	subdirTaskCh := make(chan SubdirTask, 100)
+	fileCmpTaskCh := make(chan FileCmpTask, 100)
 	resCh := make(chan SubDirTaskResult, 100)
 	for range 10 {
-		go subdirWorker(taskCh, resCh, wg)
+		go subdirWorker(subdirTaskCh, fileCmpTaskCh, resCh, wg)
+	}
+	for range 5 {
+		go fileCmpWorker(fileCmpTaskCh)
 	}
 	wg.Add(1)
-	go iterDirItemMap(src, dst, taskCh, wg)
+	go iterDirItemMap(src, dst, subdirTaskCh, wg)
 	go closeChannelOnWaitDone(resCh, wg)
 	syncPreview := SyncPreview{
 		Status:  StatusNone,
@@ -86,8 +103,9 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 		}
 		targetPreview.Files = result.files
 	}
-	// Close task channel for goroutines to exit.
-	close(taskCh)
+	// Close channels for goroutines to exit
+	close(subdirTaskCh)
+	close(fileCmpTaskCh)
 	return syncPreview
 }
 
@@ -178,8 +196,8 @@ func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.W
 	}
 }
 
-func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.WaitGroup) {
-	for task := range taskCh {
+func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, resCh chan SubDirTaskResult, wg *sync.WaitGroup) {
+	for task := range subdirTaskCh {
 		taskRes := SubDirTaskResult{relPath: task.relPath, status: StatusNone, files: make(map[string]SyncStatus)}
 		if task.srcSubdirItems == nil {
 			// Subdir does not exist in source
@@ -196,8 +214,11 @@ func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.
 			}
 			taskRes.status = StatusCreated
 		} else {
+			cmpWg := new(sync.WaitGroup)
+			cmpResCh := make(chan FileCmpTaskResult, len(task.srcSubdirItems))
 			for fileName := range task.srcSubdirItems {
 				_, ok := task.dstSubdirItems[fileName]
+				delete(task.dstSubdirItems, fileName)
 				if ok {
 					taskRes.files[fileName] = StatusNone
 					srcFilePath := filepath.Join(task.srcBasePath, task.relPath, fileName)
@@ -208,30 +229,57 @@ func subdirWorker(taskCh chan SubdirTask, resCh chan SubDirTaskResult, wg *sync.
 						continue
 					}
 					if isSameSize {
-						isSameFile, err := isSameFileContent(srcFilePath, dstFilePath)
-						if err != nil {
-							log.Println(err)
-							continue
-						} else if isSameFile {
-							continue
+						cmpWg.Add(1)
+						fileCmpTaskCh <- FileCmpTask{
+							fileName:    fileName,
+							srcFilePath: srcFilePath,
+							dstFilePath: dstFilePath,
+							cmpResCh:    cmpResCh,
+							wg:          cmpWg,
 						}
+						continue
 					}
 					taskRes.files[fileName] = StatusModified
 					taskRes.status = StatusModified
-				} else {
-					taskRes.files[fileName] = StatusCreated
-					taskRes.status = StatusModified
+					continue
 				}
-				delete(task.dstSubdirItems, fileName)
+				taskRes.files[fileName] = StatusCreated
+				taskRes.status = StatusModified
 			}
 
 			for fileName := range task.dstSubdirItems {
 				taskRes.files[fileName] = StatusDeleted
 				taskRes.status = StatusModified
 			}
+
+			go closeChannelOnWaitDone(cmpResCh, cmpWg)
+			for cmpRes := range cmpResCh {
+				if !cmpRes.isSameFile {
+					taskRes.files[cmpRes.fileName] = StatusModified
+					taskRes.status = StatusModified
+				}
+			}
 		}
 		resCh <- taskRes
 		wg.Done()
+	}
+}
+
+func fileCmpWorker(ch chan FileCmpTask) {
+	for fileCmpTask := range ch {
+		res := FileCmpTaskResult{
+			fileName: fileCmpTask.fileName,
+		}
+		isSameFile, err := isSameFileContent(fileCmpTask.srcFilePath, fileCmpTask.dstFilePath)
+		if err != nil {
+			// On error, do not overwrite file (treat as same file)
+			log.Println(err)
+			res.isSameFile = true
+		} else {
+			res.isSameFile = isSameFile
+		}
+		fileCmpTask.cmpResCh <- res
+		fileCmpTask.wg.Done()
 	}
 }
 

@@ -17,14 +17,14 @@ func main() {
 	// Create an instance of the app structure
 	app := backend.NewApp()
 	dirSyncStruct := lsync.SyncPreview{}
-	var dirSyncStatus = []struct {
+	var syncStatus = []struct {
 		Value  lsync.SyncStatus
 		TSName string
 	}{
 		{lsync.StatusNone, "None"},
+		{lsync.StatusDeleted, "Deleted"},
 		{lsync.StatusCreated, "Created"},
 		{lsync.StatusModified, "Modified"},
-		{lsync.StatusDeleted, "Deleted"},
 	}
 
 	// Create application with options
@@ -43,7 +43,7 @@ func main() {
 			&dirSyncStruct,
 		},
 		EnumBind: []interface{}{
-			dirSyncStatus,
+			syncStatus,
 		},
 	})
 

@@ -2,12 +2,13 @@ export namespace lsync {
 	
 	export enum SyncStatus {
 	    None = "None",
+	    Deleted = "Deleted",
 	    Created = "Created",
 	    Modified = "Modified",
-	    Deleted = "Deleted",
 	}
 	export class SyncPreview {
 	    Status: SyncStatus;
+	    BitStatus: number;
 	    Subdirs: Record<string, SyncPreview>;
 	    Files: Record<string, string>;
 	
@@ -18,6 +19,7 @@ export namespace lsync {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.Status = source["Status"];
+	        this.BitStatus = source["BitStatus"];
 	        this.Subdirs = this.convertValues(source["Subdirs"], SyncPreview, true);
 	        this.Files = source["Files"];
 	    }

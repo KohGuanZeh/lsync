@@ -13,18 +13,27 @@ import (
 )
 
 type SyncStatus string
+type BitSyncStatus uint8
 
 const (
 	StatusNone     SyncStatus = "None"
-	StatusCreated  SyncStatus = "Created"
 	StatusDeleted  SyncStatus = "Deleted"
+	StatusCreated  SyncStatus = "Created"
 	StatusModified SyncStatus = "Modified"
 )
 
+const (
+	BitStatusNone     BitSyncStatus = 0b0001
+	BitStatusDeleted  BitSyncStatus = 0b0010
+	BitStatusCreated  BitSyncStatus = 0b0100
+	BitStatusModified BitSyncStatus = 0b1000
+)
+
 type SyncPreview struct {
-	Status  SyncStatus
-	Subdirs map[string]*SyncPreview
-	Files   map[string]SyncStatus
+	Status    SyncStatus
+	BitStatus BitSyncStatus
+	Subdirs   map[string]*SyncPreview
+	Files     map[string]SyncStatus
 }
 
 type SubdirTask struct {
@@ -36,9 +45,10 @@ type SubdirTask struct {
 }
 
 type SubDirTaskResult struct {
-	relPath string
-	status  SyncStatus
-	files   map[string]SyncStatus
+	relPath   string
+	status    SyncStatus
+	bitStatus BitSyncStatus
+	files     map[string]SyncStatus
 }
 
 type FileCmpTask struct {
@@ -69,12 +79,13 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 	go iterDirItemMap(src, dst, subdirTaskCh, wg)
 	go closeChannelOnWaitDone(resCh, wg)
 	syncPreview := SyncPreview{
-		Status:  StatusNone,
-		Subdirs: make(map[string]*SyncPreview),
+		Status:    StatusNone,
+		BitStatus: 0,
+		Subdirs:   make(map[string]*SyncPreview),
 	}
 	pathSep := string(os.PathSeparator)
 	for result := range resCh {
-		targetPreview := &syncPreview
+		preview := &syncPreview
 		subdirs := strings.Split(result.relPath, pathSep)
 		if result.relPath == "." {
 			// Root directory
@@ -82,26 +93,28 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 		}
 		for i := 0; i < len(subdirs); i++ {
 			// Alter parent status according to results
-			if targetPreview.Status != result.status {
-				targetPreview.Status = StatusModified
+			if preview.Status != result.status {
+				preview.Status = StatusModified
 			}
+			preview.BitStatus = preview.BitStatus | result.bitStatus
 			subdir := subdirs[i]
-			subdirPreview, ok := targetPreview.Subdirs[subdir]
+			subdirPreview, ok := preview.Subdirs[subdir]
 			if !ok {
 				subdirPreview = &SyncPreview{
 					Status:  result.status,
 					Subdirs: make(map[string]*SyncPreview),
 				}
-				targetPreview.Subdirs[subdir] = subdirPreview
+				preview.Subdirs[subdir] = subdirPreview
 			}
-			targetPreview = subdirPreview
+			preview = subdirPreview
 		}
-		if len(targetPreview.Subdirs) == 0 {
-			targetPreview.Status = result.status
-		} else if targetPreview.Status != result.status {
-			targetPreview.Status = StatusModified
+		if len(preview.Subdirs) == 0 {
+			preview.Status = result.status
+		} else if preview.Status != result.status {
+			preview.Status = StatusModified
 		}
-		targetPreview.Files = result.files
+		preview.BitStatus = preview.BitStatus | result.bitStatus
+		preview.Files = result.files
 	}
 	// Close channels for goroutines to exit
 	close(subdirTaskCh)
@@ -198,7 +211,7 @@ func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.W
 
 func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, resCh chan SubDirTaskResult, wg *sync.WaitGroup) {
 	for task := range subdirTaskCh {
-		taskRes := SubDirTaskResult{relPath: task.relPath, status: StatusNone, files: make(map[string]SyncStatus)}
+		taskRes := SubDirTaskResult{relPath: task.relPath, status: StatusNone, bitStatus: 0, files: make(map[string]SyncStatus)}
 		if task.srcSubdirItems == nil {
 			// Subdir does not exist in source
 			taskRes.files = make(map[string]SyncStatus, len(task.dstSubdirItems))
@@ -206,6 +219,7 @@ func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, 
 				taskRes.files[fileName] = StatusDeleted
 			}
 			taskRes.status = StatusDeleted
+			taskRes.bitStatus = BitStatusDeleted
 		} else if task.dstSubdirItems == nil {
 			// Subdir does not exist in destination
 			taskRes.files = make(map[string]SyncStatus, len(task.srcSubdirItems))
@@ -213,6 +227,7 @@ func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, 
 				taskRes.files[fileName] = StatusCreated
 			}
 			taskRes.status = StatusCreated
+			taskRes.bitStatus = BitStatusCreated
 		} else {
 			cmpWg := new(sync.WaitGroup)
 			cmpResCh := make(chan FileCmpTaskResult, len(task.srcSubdirItems))
@@ -241,15 +256,21 @@ func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, 
 					}
 					taskRes.files[fileName] = StatusModified
 					taskRes.status = StatusModified
+					taskRes.bitStatus = taskRes.bitStatus | BitStatusModified
 					continue
 				}
 				taskRes.files[fileName] = StatusCreated
 				taskRes.status = StatusModified
+				taskRes.bitStatus = taskRes.bitStatus | BitStatusCreated
 			}
 
 			for fileName := range task.dstSubdirItems {
 				taskRes.files[fileName] = StatusDeleted
+			}
+
+			if len(task.dstSubdirItems) > 0 {
 				taskRes.status = StatusModified
+				taskRes.bitStatus = taskRes.bitStatus | BitStatusDeleted
 			}
 
 			go closeChannelOnWaitDone(cmpResCh, cmpWg)
@@ -257,6 +278,9 @@ func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, 
 				if !cmpRes.isSameFile {
 					taskRes.files[cmpRes.fileName] = StatusModified
 					taskRes.status = StatusModified
+					taskRes.bitStatus = taskRes.bitStatus | BitStatusModified
+				} else {
+					taskRes.bitStatus = taskRes.bitStatus | BitStatusNone
 				}
 			}
 		}

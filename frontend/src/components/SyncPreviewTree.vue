@@ -52,17 +52,30 @@ function getClassFromSyncStatus(status: string): string {
     return ""
 }
 
+function getClassFromBitSyncStatus(bitStatus: number): string {
+    switch (bitStatus) {
+        case 0b0001:
+            return "";
+        case 0b0010:
+            return props.ignoreDeleted ? "ignored" : "deleted";
+        case 0b0100:
+            return "created";
+        case 0b0011:
+            return props.ignoreDeleted ? "" : "modified";
+    }
+    return "modified";
+}
+
 function pathJoin(path: string, name: string): string {
     return `${path}\\${name}`;
 }
 </script>
 
-<!-- Need to add key for v-for -->
 <template>
     <ul>
         <li>
             <details open>
-                <summary :class="getClassFromSyncStatus(dirPreview.Status)">{{ dirName }}</summary>
+                <summary :class="getClassFromBitSyncStatus(dirPreview.BitStatus)">{{ dirName }}</summary>
                 <div class="list-children">
                     <SyncPreviewTree v-for="v in subdirs" :key="v.path" :dir-path="v.path" :dir-name="v.name"
                         :dir-preview="v.preview" :ignore-deleted="props.ignoreDeleted">

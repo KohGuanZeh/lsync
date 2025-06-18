@@ -17,15 +17,6 @@ func main() {
 	// Create an instance of the app structure
 	app := backend.NewApp()
 	dirSyncStruct := lsync.SyncPreview{}
-	var syncStatus = []struct {
-		Value  lsync.SyncStatus
-		TSName string
-	}{
-		{lsync.StatusNone, "None"},
-		{lsync.StatusDeleted, "Deleted"},
-		{lsync.StatusCreated, "Created"},
-		{lsync.StatusModified, "Modified"},
-	}
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -41,9 +32,7 @@ func main() {
 		Bind: []interface{}{
 			app,
 			&dirSyncStruct,
-		},
-		EnumBind: []interface{}{
-			syncStatus,
+			&lsync.SYNC_STATUS,
 		},
 	})
 

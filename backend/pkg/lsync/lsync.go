@@ -12,28 +12,24 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
-type SyncStatus string
-type BitSyncStatus uint8
+type SyncStatus struct {
+	None     uint8
+	Deleted  uint8
+	Created  uint8
+	Modified uint8
+}
 
-const (
-	StatusNone     SyncStatus = "None"
-	StatusDeleted  SyncStatus = "Deleted"
-	StatusCreated  SyncStatus = "Created"
-	StatusModified SyncStatus = "Modified"
-)
-
-const (
-	BitStatusNone     BitSyncStatus = 0b0001
-	BitStatusDeleted  BitSyncStatus = 0b0010
-	BitStatusCreated  BitSyncStatus = 0b0100
-	BitStatusModified BitSyncStatus = 0b1000
-)
+var SYNC_STATUS = SyncStatus{
+	None:     0b0001,
+	Deleted:  0b0010,
+	Created:  0b0100,
+	Modified: 0b1000,
+}
 
 type SyncPreview struct {
-	Status    SyncStatus
-	BitStatus BitSyncStatus
-	Subdirs   map[string]*SyncPreview
-	Files     map[string]SyncStatus
+	Status  uint8
+	Subdirs map[string]*SyncPreview
+	Files   map[string]uint8
 }
 
 type SubdirTask struct {
@@ -45,10 +41,9 @@ type SubdirTask struct {
 }
 
 type SubDirTaskResult struct {
-	relPath   string
-	status    SyncStatus
-	bitStatus BitSyncStatus
-	files     map[string]SyncStatus
+	relPath string
+	status  uint8
+	files   map[string]uint8
 }
 
 type FileCmpTask struct {
@@ -79,9 +74,8 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 	go iterDirItemMap(src, dst, subdirTaskCh, wg)
 	go closeChannelOnWaitDone(resCh, wg)
 	syncPreview := SyncPreview{
-		Status:    StatusNone,
-		BitStatus: 0,
-		Subdirs:   make(map[string]*SyncPreview),
+		Status:  0,
+		Subdirs: make(map[string]*SyncPreview),
 	}
 	pathSep := string(os.PathSeparator)
 	for result := range resCh {
@@ -92,11 +86,7 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 			subdirs = nil
 		}
 		for i := 0; i < len(subdirs); i++ {
-			// Alter parent status according to results
-			if preview.Status != result.status {
-				preview.Status = StatusModified
-			}
-			preview.BitStatus = preview.BitStatus | result.bitStatus
+			preview.Status = preview.Status | result.status
 			subdir := subdirs[i]
 			subdirPreview, ok := preview.Subdirs[subdir]
 			if !ok {
@@ -108,12 +98,7 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 			}
 			preview = subdirPreview
 		}
-		if len(preview.Subdirs) == 0 {
-			preview.Status = result.status
-		} else if preview.Status != result.status {
-			preview.Status = StatusModified
-		}
-		preview.BitStatus = preview.BitStatus | result.bitStatus
+		preview.Status = preview.Status | result.status
 		preview.Files = result.files
 	}
 	// Close channels for goroutines to exit
@@ -124,7 +109,9 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 
 func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) error {
 	switch preview.Status {
-	case StatusCreated:
+	case SYNC_STATUS.None:
+		return nil
+	case SYNC_STATUS.Created:
 		err := os.Mkdir(dst, 0755)
 		if err != nil {
 			return err
@@ -137,17 +124,24 @@ func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) er
 				return err
 			}
 		}
-	case StatusModified:
+	case SYNC_STATUS.Modified:
+		if ignoreDelete {
+			return nil
+		}
+		err := os.RemoveAll(dst)
+		return err
+	default:
+		// In all other cases, the folder is modified
 		for file, fileStatus := range preview.Files {
 			dstPath := filepath.Join(dst, file)
 			switch fileStatus {
-			case StatusCreated, StatusModified:
+			case SYNC_STATUS.Created, SYNC_STATUS.Modified:
 				srcPath := filepath.Join(src, file)
 				err := copyFile(srcPath, dstPath)
 				if err != nil {
 					return err
 				}
-			case StatusDeleted:
+			case SYNC_STATUS.Deleted:
 				if ignoreDelete {
 					break
 				}
@@ -157,27 +151,17 @@ func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) er
 				}
 			}
 		}
-	case StatusDeleted:
-		if ignoreDelete {
-			break
-		}
-		err := os.RemoveAll(dst)
+	}
+
+	// Only if folder is created or modified, sync on subfolders.
+	for subdir, subdirPreview := range preview.Subdirs {
+		srcPath := filepath.Join(src, subdir)
+		dstPath := filepath.Join(dst, subdir)
+		err := SyncWithPreview(srcPath, dstPath, *subdirPreview, ignoreDelete)
 		if err != nil {
 			return err
 		}
 	}
-
-	if preview.Status == StatusCreated || preview.Status == StatusModified {
-		for subdir, subdirPreview := range preview.Subdirs {
-			srcPath := filepath.Join(src, subdir)
-			dstPath := filepath.Join(dst, subdir)
-			err := SyncWithPreview(srcPath, dstPath, *subdirPreview, ignoreDelete)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -211,23 +195,21 @@ func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.W
 
 func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, resCh chan SubDirTaskResult, wg *sync.WaitGroup) {
 	for task := range subdirTaskCh {
-		taskRes := SubDirTaskResult{relPath: task.relPath, status: StatusNone, bitStatus: 0, files: make(map[string]SyncStatus)}
+		taskRes := SubDirTaskResult{relPath: task.relPath, status: 0, files: make(map[string]uint8)}
 		if task.srcSubdirItems == nil {
 			// Subdir does not exist in source
-			taskRes.files = make(map[string]SyncStatus, len(task.dstSubdirItems))
+			taskRes.files = make(map[string]uint8, len(task.dstSubdirItems))
 			for fileName := range task.dstSubdirItems {
-				taskRes.files[fileName] = StatusDeleted
+				taskRes.files[fileName] = SYNC_STATUS.Deleted
 			}
-			taskRes.status = StatusDeleted
-			taskRes.bitStatus = BitStatusDeleted
+			taskRes.status = SYNC_STATUS.Deleted
 		} else if task.dstSubdirItems == nil {
 			// Subdir does not exist in destination
-			taskRes.files = make(map[string]SyncStatus, len(task.srcSubdirItems))
+			taskRes.files = make(map[string]uint8, len(task.srcSubdirItems))
 			for fileName := range task.srcSubdirItems {
-				taskRes.files[fileName] = StatusCreated
+				taskRes.files[fileName] = SYNC_STATUS.Created
 			}
-			taskRes.status = StatusCreated
-			taskRes.bitStatus = BitStatusCreated
+			taskRes.status = SYNC_STATUS.Created
 		} else {
 			cmpWg := new(sync.WaitGroup)
 			cmpResCh := make(chan FileCmpTaskResult, len(task.srcSubdirItems))
@@ -235,7 +217,6 @@ func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, 
 				_, ok := task.dstSubdirItems[fileName]
 				delete(task.dstSubdirItems, fileName)
 				if ok {
-					taskRes.files[fileName] = StatusNone
 					srcFilePath := filepath.Join(task.srcBasePath, task.relPath, fileName)
 					dstFilePath := filepath.Join(task.dstBasePath, task.relPath, fileName)
 					isSameSize, err := isSameFileSize(srcFilePath, dstFilePath)
@@ -254,33 +235,29 @@ func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, 
 						}
 						continue
 					}
-					taskRes.files[fileName] = StatusModified
-					taskRes.status = StatusModified
-					taskRes.bitStatus = taskRes.bitStatus | BitStatusModified
+					taskRes.files[fileName] = SYNC_STATUS.Modified
+					taskRes.status = taskRes.status | SYNC_STATUS.Modified
 					continue
 				}
-				taskRes.files[fileName] = StatusCreated
-				taskRes.status = StatusModified
-				taskRes.bitStatus = taskRes.bitStatus | BitStatusCreated
-			}
-
-			for fileName := range task.dstSubdirItems {
-				taskRes.files[fileName] = StatusDeleted
+				taskRes.files[fileName] = SYNC_STATUS.Created
+				taskRes.status = taskRes.status | SYNC_STATUS.Created
 			}
 
 			if len(task.dstSubdirItems) > 0 {
-				taskRes.status = StatusModified
-				taskRes.bitStatus = taskRes.bitStatus | BitStatusDeleted
+				taskRes.status = taskRes.status | SYNC_STATUS.Deleted
+			}
+			for fileName := range task.dstSubdirItems {
+				taskRes.files[fileName] = SYNC_STATUS.Deleted
 			}
 
 			go closeChannelOnWaitDone(cmpResCh, cmpWg)
 			for cmpRes := range cmpResCh {
 				if !cmpRes.isSameFile {
-					taskRes.files[cmpRes.fileName] = StatusModified
-					taskRes.status = StatusModified
-					taskRes.bitStatus = taskRes.bitStatus | BitStatusModified
+					taskRes.files[cmpRes.fileName] = SYNC_STATUS.Modified
+					taskRes.status = taskRes.status | SYNC_STATUS.Modified
 				} else {
-					taskRes.bitStatus = taskRes.bitStatus | BitStatusNone
+					taskRes.files[cmpRes.fileName] = SYNC_STATUS.None
+					taskRes.status = taskRes.status | SYNC_STATUS.None
 				}
 			}
 		}

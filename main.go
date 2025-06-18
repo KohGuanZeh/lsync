@@ -16,7 +16,7 @@ var assets embed.FS
 func main() {
 	// Create an instance of the app structure
 	app := backend.NewApp()
-	dirSyncStruct := lsync.SyncPreview{}
+	syncPreview := lsync.SyncPreview{}
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -31,8 +31,7 @@ func main() {
 		OnStartup:        app.Startup,
 		Bind: []interface{}{
 			app,
-			&dirSyncStruct,
-			&lsync.SYNC_STATUS,
+			&syncPreview,
 		},
 	})
 

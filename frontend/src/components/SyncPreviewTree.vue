@@ -2,6 +2,14 @@
 import { computed, PropType } from 'vue';
 import { lsync } from '../../wailsjs/go/models';
 
+const STATUS = {
+    NONE: 0b0001,
+    DELETED: 0b0010,
+    CREATED: 0b0100,
+    MODIFIED: 0b1000,
+    DELETED_AND_NONE: 0b0011,
+}
+
 const props = defineProps({
     dirPath: {
         type: String,
@@ -39,13 +47,13 @@ const files = computed(() => Object.entries(props.dirPreview.Files).map(kv => {
 
 function getClassFromSyncStatus(status: number): string {
     switch (status) {
-        case 0b0001:
+        case STATUS.NONE:
             return "";
-        case 0b0010:
+        case STATUS.DELETED:
             return props.ignoreDeleted ? "ignored" : "deleted";
-        case 0b0100:
+        case STATUS.CREATED:
             return "created";
-        case 0b0011:
+        case STATUS.DELETED_AND_NONE:
             return props.ignoreDeleted ? "" : "modified";
     }
     return "modified";

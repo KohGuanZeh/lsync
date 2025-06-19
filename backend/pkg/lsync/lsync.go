@@ -12,6 +12,13 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
+type SyncOpType uint8
+
+const (
+	SYNC_OP_COPY SyncOpType = iota
+	SYNC_OP_DELETE
+)
+
 const (
 	STATUS_NONE     uint8 = 0b0001
 	STATUS_DELETED  uint8 = 0b0010
@@ -50,6 +57,18 @@ type FileCmpTask struct {
 type FileCmpTaskResult struct {
 	fileName   string
 	isSameFile bool
+}
+
+type SyncOpTask struct {
+	opType SyncOpType
+	// For COPY, element 0 will be source.
+	paths []string
+}
+
+type PreviewQueueItem struct {
+	preview *SyncPreview
+	srcPath string
+	dstPath string
 }
 
 func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
@@ -100,62 +119,80 @@ func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
 	return syncPreview
 }
 
-func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) error {
-	switch preview.Status {
-	case STATUS_NONE:
-		return nil
-	case STATUS_CREATED:
-		err := os.Mkdir(dst, 0755)
-		if err != nil {
-			return err
-		}
-		for file := range preview.Files {
-			srcPath := filepath.Join(src, file)
-			dstPath := filepath.Join(dst, file)
-			err := copyFile(srcPath, dstPath)
+func SyncWithPreview(src, dst string, preview SyncPreview, ignoreDelete bool) {
+	wg := new(sync.WaitGroup)
+	taskCh := make(chan SyncOpTask, 100)
+	for range 5 {
+		wg.Add(1)
+		go syncWorker(taskCh, wg)
+	}
+	previewQueue := []PreviewQueueItem{{preview: &preview, srcPath: src, dstPath: dst}}
+	for len(previewQueue) > 0 {
+		curr := previewQueue[0]
+		previewQueue = previewQueue[1:]
+		switch curr.preview.Status {
+		case STATUS_NONE:
+			continue
+		case STATUS_DELETED:
+			if ignoreDelete {
+				continue
+			}
+			taskCh <- SyncOpTask{
+				opType: SYNC_OP_DELETE,
+				paths:  []string{curr.dstPath},
+			}
+			continue
+		case STATUS_CREATED:
+			err := os.Mkdir(curr.dstPath, 0755)
 			if err != nil {
-				return err
+				log.Println(err)
+				continue
 			}
-		}
-	case STATUS_MODIFIED:
-		if ignoreDelete {
-			return nil
-		}
-		err := os.RemoveAll(dst)
-		return err
-	default:
-		// In all other cases, the folder is modified
-		for file, fileStatus := range preview.Files {
-			dstPath := filepath.Join(dst, file)
-			switch fileStatus {
-			case STATUS_CREATED, STATUS_MODIFIED:
-				srcPath := filepath.Join(src, file)
-				err := copyFile(srcPath, dstPath)
-				if err != nil {
-					return err
-				}
-			case STATUS_DELETED:
-				if ignoreDelete {
-					break
-				}
-				err := os.Remove(dstPath)
-				if err != nil {
-					return err
+			for fileName := range curr.preview.Files {
+				srcPath := filepath.Join(curr.srcPath, fileName)
+				dstPath := filepath.Join(curr.dstPath, fileName)
+				taskCh <- SyncOpTask{
+					opType: SYNC_OP_COPY,
+					paths:  []string{srcPath, dstPath},
 				}
 			}
+		default:
+			// In all other cases, the directory is modified
+			for fileName, fileStatus := range curr.preview.Files {
+				dstPath := filepath.Join(curr.dstPath, fileName)
+				switch fileStatus {
+				case STATUS_NONE:
+					continue
+				case STATUS_DELETED:
+					if ignoreDelete {
+						continue
+					}
+					taskCh <- SyncOpTask{
+						opType: SYNC_OP_DELETE,
+						paths:  []string{dstPath},
+					}
+				default:
+					srcPath := filepath.Join(curr.srcPath, fileName)
+					taskCh <- SyncOpTask{
+						opType: SYNC_OP_COPY,
+						paths:  []string{srcPath, dstPath},
+					}
+				}
+			}
+		}
+		// Append remaining subdirectories to sync
+		for subdirName, subdirPreview := range curr.preview.Subdirs {
+			srcPath := filepath.Join(curr.srcPath, subdirName)
+			dstPath := filepath.Join(curr.dstPath, subdirName)
+			previewQueue = append(previewQueue, PreviewQueueItem{
+				preview: subdirPreview,
+				srcPath: srcPath,
+				dstPath: dstPath,
+			})
 		}
 	}
-
-	// Only if folder is created or modified, sync on subfolders.
-	for subdir, subdirPreview := range preview.Subdirs {
-		srcPath := filepath.Join(src, subdir)
-		dstPath := filepath.Join(dst, subdir)
-		err := SyncWithPreview(srcPath, dstPath, *subdirPreview, ignoreDelete)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	close(taskCh)
+	wg.Wait()
 }
 
 func iterDirItemMap(src, dst dirfetch.DirItemMap, ch chan SubdirTask, wg *sync.WaitGroup) {
@@ -277,6 +314,26 @@ func fileCmpWorker(ch chan FileCmpTask) {
 	}
 }
 
+func syncWorker(ch chan SyncOpTask, wg *sync.WaitGroup) {
+	for syncOpTask := range ch {
+		switch syncOpTask.opType {
+		case SYNC_OP_COPY:
+			src := syncOpTask.paths[0]
+			dsts := syncOpTask.paths[1:]
+			copyFiles(src, dsts)
+		case SYNC_OP_DELETE:
+			for _, path := range syncOpTask.paths {
+				err := os.RemoveAll(path)
+				if err != nil {
+					log.Printf("Failed to Sync for %v\n", path)
+					log.Println(err)
+				}
+			}
+		}
+	}
+	wg.Done()
+}
+
 func closeChannelOnWaitDone[T any](ch chan T, wg *sync.WaitGroup) {
 	wg.Wait()
 	close(ch)
@@ -310,18 +367,23 @@ func isSameFileContent(src, dst string) (bool, error) {
 	return srcDigest == dstDigest, nil
 }
 
-func copyFile(src, dst string) error {
+func copyFiles(src string, dsts []string) {
 	srcFile, err := os.Open(src)
 	if err != nil {
-		return err
+		log.Printf("Failed to Open %v\n", src)
+		log.Println(err)
+		return
 	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
+	for _, dst := range dsts {
+		dstFile, err := os.Create(dst)
+		if err != nil {
+			log.Println(err)
+		}
+		_, err = io.Copy(dstFile, srcFile)
+		if err != nil {
+			log.Println(err)
+		}
+		dstFile.Close()
 	}
-	defer dstFile.Close()
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	srcFile.Close()
 }

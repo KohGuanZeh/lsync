@@ -15,14 +15,6 @@ type DirItemMap struct {
 	RelPaths map[string]map[string]struct{}
 }
 
-func FetchDirAsync(path string) chan DirFetchResult {
-	ch := make(chan DirFetchResult)
-	go func() {
-		ch <- FetchDir(path)
-	}()
-	return ch
-}
-
 func FetchDir(path string) DirFetchResult {
 	itemMap := DirItemMap{
 		BasePath: path,

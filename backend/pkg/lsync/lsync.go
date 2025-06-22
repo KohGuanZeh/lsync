@@ -52,6 +52,7 @@ type FileCmpTask struct {
 	dstFilePath string
 	cmpResCh    chan FileCmpTaskResult
 	wg          *sync.WaitGroup
+	updater     SyncPreviewUpdater
 }
 
 type FileCmpTaskResult struct {
@@ -69,6 +70,11 @@ type PreviewQueueItem struct {
 	preview *SyncPreview
 	srcPath string
 	dstPath string
+}
+
+type SyncPreviewUpdater struct {
+	preview *SyncPreview
+	mutex   *sync.Mutex
 }
 
 func PreviewSync(src, dst dirfetch.DirItemMap) SyncPreview {
@@ -242,6 +248,7 @@ func subdirWorker(subdirTaskCh chan SubdirTask, fileCmpTaskCh chan FileCmpTask, 
 			taskRes.status = STATUS_CREATED
 		} else {
 			cmpWg := new(sync.WaitGroup)
+			updaterMutex := new(sync.Mutex)
 			cmpResCh := make(chan FileCmpTaskResult, len(task.srcSubdirItems))
 			for fileName := range task.srcSubdirItems {
 				_, ok := task.dstSubdirItems[fileName]
